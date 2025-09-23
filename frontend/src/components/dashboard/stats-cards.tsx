@@ -11,6 +11,7 @@ import {
   TrendingDown,
   Minus
 } from 'lucide-react'
+import { useDashboardOverview } from '@/lib/hooks/useDashboard'
 
 interface StatCard {
   title: string
@@ -23,37 +24,6 @@ interface StatCard {
   icon: any
   variant?: 'default' | 'success' | 'warning' | 'destructive'
 }
-
-const stats: StatCard[] = [
-  {
-    title: 'Total Datasets',
-    value: 24,
-    change: { value: 12, trend: 'up', period: 'vs last month' },
-    icon: Database,
-    variant: 'default'
-  },
-  {
-    title: 'Active Issues',
-    value: 127,
-    change: { value: 8, trend: 'down', period: 'vs last week' },
-    icon: AlertTriangle,
-    variant: 'warning'
-  },
-  {
-    title: 'Resolved Issues',
-    value: 1843,
-    change: { value: 23, trend: 'up', period: 'vs last week' },
-    icon: CheckCircle,
-    variant: 'success'
-  },
-  {
-    title: 'Executions Today',
-    value: 15,
-    change: { value: 0, trend: 'neutral', period: 'vs yesterday' },
-    icon: Activity,
-    variant: 'default'
-  }
-]
 
 function getTrendIcon(trend: 'up' | 'down' | 'neutral') {
   switch (trend) {
@@ -77,6 +47,94 @@ function getTrendColor(trend: 'up' | 'down' | 'neutral', context: 'positive' | '
 }
 
 export function StatsCards() {
+  const { data: dashboardData, isLoading, error } = useDashboardOverview()
+
+  // Add debugging
+  console.log('StatsCards render:', {
+    hasData: !!dashboardData,
+    isLoading,
+    hasError: !!error,
+    error: error?.message
+  })
+
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+              <div className="h-4 w-4 bg-muted animate-pulse rounded" />
+            </CardHeader>
+            <CardContent>
+              <div className="h-8 w-16 bg-muted animate-pulse rounded mb-2" />
+              <div className="h-3 w-24 bg-muted animate-pulse rounded" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (error) {
+    console.error('Dashboard data error:', error)
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground">
+              Unable to load dashboard data
+              {process.env.NODE_ENV === 'development' && error && (
+                <div className="mt-2 text-xs text-red-500">
+                  Error: {error instanceof Error ? error.message : 'Unknown error'}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-sm text-muted-foreground">No dashboard data available</div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  const stats: StatCard[] = [
+    {
+      title: 'Total Datasets',
+      value: dashboardData.overview.total_datasets,
+      icon: Database,
+      variant: 'default'
+    },
+    {
+      title: 'Active Issues',
+      value: dashboardData.overview.total_issues - dashboardData.overview.total_fixes,
+      icon: AlertTriangle,
+      variant: 'warning'
+    },
+    {
+      title: 'Resolved Issues',
+      value: dashboardData.overview.total_fixes,
+      icon: CheckCircle,
+      variant: 'success'
+    },
+    {
+      title: 'Total Executions',
+      value: dashboardData.overview.total_executions,
+      icon: Activity,
+      variant: 'default'
+    }
+  ]
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {stats.map((stat, index) => {

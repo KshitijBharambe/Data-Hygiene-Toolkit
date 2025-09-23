@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,14 @@ export default function UploadDataPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const router = useRouter()
+  const { data: session } = useSession()
+
+  // Ensure token is set when session is available
+  useEffect(() => {
+    if (session?.accessToken) {
+      apiClient.setToken(session.accessToken as string)
+    }
+  }, [session])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -98,6 +107,11 @@ export default function UploadDataPage() {
     setUploadProgress(0)
 
     try {
+      // Force set token from session if available
+      if (session?.accessToken) {
+        apiClient.setToken(session.accessToken as string)
+      }
+
       // Simulate upload progress
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {

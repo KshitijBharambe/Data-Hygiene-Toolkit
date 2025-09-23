@@ -4,9 +4,9 @@ from typing import List, Dict, Any, Optional, cast
 import json
 
 from app.database import get_session
-from app.models import User, Dataset
+from app.models import User, Dataset, DatasetColumn
 from app.auth import get_any_authenticated_user
-from app.schemas import DatasetResponse, DataProfileResponse
+from app.schemas import DatasetResponse, DataProfileResponse, DatasetColumnResponse
 from app.services.data_import import DataImportService
 
 router = APIRouter(prefix="/data", tags=["Data Import"])
@@ -156,3 +156,64 @@ async def delete_dataset(
     db.commit()
 
     return {"message": "Dataset deleted successfully"}
+
+
+@router.get("/datasets/{dataset_id}/columns", response_model=List[DatasetColumnResponse])
+async def get_dataset_columns(
+    dataset_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get columns for a specific dataset
+    """
+    # First verify the dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
+    # Get dataset columns
+    columns = db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).order_by(DatasetColumn.ordinal_position).all()
+    return [DatasetColumnResponse.model_validate(column) for column in columns]
+
+
+@router.get("/datasets/{dataset_id}/profile", response_model=DataProfileResponse)
+async def get_dataset_profile(
+    dataset_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get comprehensive data profile for a dataset
+    """
+    # Get dataset
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
+    # Get dataset columns
+    columns = db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).order_by(DatasetColumn.ordinal_position).all()
+
+    # Build data types summary
+    data_types_summary = {}
+    for column in columns:
+        col_type = column.inferred_type or 'unknown'
+        data_types_summary[col_type] = data_types_summary.get(col_type, 0) + 1
+
+    # For now, create basic missing values summary
+    # In a real implementation, this would analyze the actual data
+    missing_values_summary = {}
+
+    return DataProfileResponse(
+        total_rows=dataset.row_count or 0,
+        total_columns=dataset.column_count or 0,
+        columns=[DatasetColumnResponse.model_validate(column) for column in columns],
+        data_types_summary=data_types_summary,
+        missing_values_summary=missing_values_summary
+    )
