@@ -1,0 +1,7 @@
+id,name,age,city,email
+1,John Doe,29,New York,john@example.com
+2,Jane Smith,,Los Angeles,jane@example.com
+3,Bob Johnson,45,,bob@example.com
+4,Alice Williams,32,Chicago,
+5,Michael Brown,,,
+6,,27,Boston,mike@example.com

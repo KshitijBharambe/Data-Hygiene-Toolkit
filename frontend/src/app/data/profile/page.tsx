@@ -49,6 +49,7 @@ interface ColumnStats {
   uniqueCount: number
   uniquePercentage: number
   sampleValues: string[]
+  isNullable: boolean
 }
 
 export default function DataProfilePage() {
@@ -145,21 +146,49 @@ export default function DataProfilePage() {
     return <XCircle className="h-4 w-4 text-red-600" />
   }
 
-  // Mock column statistics - in real implementation, this would come from the API
+  // Generate column statistics from profile data
   const generateColumnStats = (columns: DatasetColumn[]): ColumnStats[] => {
-    return columns.map(col => ({
-      name: col.name,
-      type: col.inferred_type || 'unknown',
-      nullCount: Math.floor(Math.random() * 100),
-      nullPercentage: Math.floor(Math.random() * 20),
-      uniqueCount: Math.floor(Math.random() * 1000),
-      uniquePercentage: Math.floor(Math.random() * 100),
-      sampleValues: [
-        'Sample Value 1',
-        'Sample Value 2',
-        'Sample Value 3'
-      ]
-    }))
+    const totalRows = profile?.total_rows || 1
+
+    return columns.map(col => {
+      // For demo purposes, generate realistic statistics
+      // In a real implementation, this data would come from the backend analysis
+      const nullPercentage = col.is_nullable ? Math.floor(Math.random() * 15) + 1 : 0
+      const nullCount = Math.floor((nullPercentage / 100) * totalRows)
+      const uniqueCount = Math.floor(totalRows * (Math.random() * 0.8 + 0.2)) // 20-100% unique
+      const uniquePercentage = Math.floor((uniqueCount / totalRows) * 100)
+
+      return {
+        name: col.name,
+        type: col.inferred_type || 'unknown',
+        nullCount,
+        nullPercentage,
+        uniqueCount,
+        uniquePercentage,
+        isNullable: col.is_nullable,
+        sampleValues: getSampleValues(col.inferred_type || 'text')
+      }
+    })
+  }
+
+  const getSampleValues = (type: string): string[] => {
+    switch (type?.toLowerCase()) {
+      case 'integer':
+      case 'int':
+        return ['123', '456', '789']
+      case 'decimal':
+      case 'float':
+        return ['12.34', '56.78', '90.12']
+      case 'datetime':
+      case 'date':
+        return ['2024-01-15', '2024-02-20', '2024-03-10']
+      case 'boolean':
+        return ['true', 'false', 'true']
+      case 'text':
+      case 'string':
+      default:
+        return ['Sample Text A', 'Sample Text B', 'Sample Text C']
+    }
   }
 
   const columnStats = profile ? generateColumnStats(profile.columns) : []
@@ -322,8 +351,8 @@ export default function DataProfilePage() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge variant={profile.columns[index]?.is_nullable ? 'secondary' : 'outline'}>
-                                  {profile.columns[index]?.is_nullable ? 'Yes' : 'No'}
+                                <Badge variant={stat.isNullable ? 'secondary' : 'outline'}>
+                                  {stat.isNullable ? 'Yes' : 'No'}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -399,7 +428,7 @@ export default function DataProfilePage() {
                         <div className="flex justify-between items-center">
                           <span>Nullable Columns</span>
                           <Badge variant="secondary">
-                            {profile.columns.filter(c => c.is_nullable).length}/{profile.columns.length}
+                            {columnStats.filter(c => c.isNullable).length}/{columnStats.length}
                           </Badge>
                         </div>
                       </CardContent>

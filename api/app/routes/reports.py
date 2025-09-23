@@ -287,7 +287,7 @@ async def get_dashboard_overview(
 
         recent_executions = (
             db.query(Execution)
-            .order_by(Execution.created_at.desc())
+            .order_by(Execution.started_at.desc())
             .limit(5)
             .all()
         )
@@ -336,8 +336,8 @@ async def get_dashboard_overview(
                         "id": execution.id,
                         "dataset_version_id": execution.dataset_version_id,
                         "status": execution.status.value,
-                        "issues_found": execution.issues_found or 0,
-                        "created_at": execution.created_at
+                        "issues_found": len(execution.issues) if execution.issues else 0,
+                        "created_at": execution.started_at
                     }
                     for execution in recent_executions
                 ]

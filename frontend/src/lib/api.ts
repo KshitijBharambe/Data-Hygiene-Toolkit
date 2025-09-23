@@ -10,7 +10,8 @@ import {
   FileUploadResponse, DataProfileResponse,
   ExecutionSummary, DataQualitySummary,
   RuleTestRequest,
-  ApiResponse, PaginatedResponse
+  ApiResponse, PaginatedResponse,
+  DashboardOverview
 } from '@/types/api'
 
 class ApiClient {
@@ -73,6 +74,10 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token')
     }
+  }
+
+  getToken() {
+    return this.token
   }
 
   // Auth endpoints
@@ -146,16 +151,8 @@ class ApiClient {
   }
 
   async getDataProfile(datasetId: string): Promise<DataProfileResponse> {
-    // Since the backend doesn't have a dedicated profile endpoint yet,
-    // we'll construct a mock response based on the dataset
-    const dataset = await this.getDataset(datasetId)
-    return {
-      total_rows: dataset.row_count || 0,
-      total_columns: dataset.column_count || 0,
-      columns: [], // This would be populated from a real profile endpoint
-      data_types_summary: {},
-      missing_values_summary: {}
-    }
+    const response = await this.client.get<DataProfileResponse>(`/data/datasets/${datasetId}/profile`)
+    return response.data
   }
 
   // Dataset versions
@@ -171,7 +168,7 @@ class ApiClient {
 
   // Dataset columns
   async getDatasetColumns(datasetId: string): Promise<DatasetColumn[]> {
-    const response = await this.client.get<DatasetColumn[]>(`/datasets/${datasetId}/columns`)
+    const response = await this.client.get<DatasetColumn[]>(`/data/datasets/${datasetId}/columns`)
     return response.data
   }
 
@@ -290,6 +287,12 @@ class ApiClient {
     const response = await this.client.get<PaginatedResponse<ExecutionSummary>>('/reports/executions', {
       params: { page, size }
     })
+    return response.data
+  }
+
+  // Dashboard endpoints
+  async getDashboardOverview(): Promise<DashboardOverview> {
+    const response = await this.client.get<DashboardOverview>('/reports/dashboard/overview')
     return response.data
   }
 }

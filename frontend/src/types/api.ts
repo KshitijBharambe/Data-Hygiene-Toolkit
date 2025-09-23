@@ -255,3 +255,39 @@ export interface PaginatedResponse<T> {
   size: number
   pages: number
 }
+
+// Dashboard types
+export interface DashboardOverview {
+  overview: {
+    total_datasets: number
+    total_executions: number
+    total_issues: number
+    total_fixes: number
+    avg_quality_score: number
+    issues_fixed_rate: number
+  }
+  recent_activity: {
+    recent_datasets: Array<{
+      id: string
+      name: string
+      status: DatasetStatus
+      uploaded_at: string
+    }>
+    recent_executions: Array<{
+      id: string
+      dataset_version_id: string
+      status: ExecutionStatus
+      issues_found: number
+      created_at: string
+    }>
+  }
+  statistics: {
+    dataset_status_distribution: Record<string, number>
+    quality_score_distribution: {
+      excellent: number
+      good: number
+      fair: number
+      poor: number
+    }
+  }
+}
