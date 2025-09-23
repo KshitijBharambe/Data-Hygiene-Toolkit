@@ -68,15 +68,41 @@ async def create_execution(
     """
     Execute rules on a dataset version
     """
-    # Get dataset version
+    # Force reload
+    # Get dataset version - try as version ID first, then as dataset ID
     dataset_version = db.query(DatasetVersion).filter(
         DatasetVersion.id == execution_data.dataset_version_id
     ).first()
 
     if not dataset_version:
+        # If not found as version ID, try to find the latest version of the dataset
+        dataset = db.query(Dataset).filter(Dataset.id == execution_data.dataset_version_id).first()
+        if dataset:
+            # Get the latest version for this dataset
+            dataset_version = db.query(DatasetVersion).filter(
+                DatasetVersion.dataset_id == dataset.id
+            ).order_by(DatasetVersion.created_at.desc()).first()
+
+            # If no versions exist, create one
+            if not dataset_version:
+                import uuid
+                from datetime import datetime
+
+                dataset_version = DatasetVersion(
+                    id=str(uuid.uuid4()),
+                    dataset_id=dataset.id,
+                    version_no=1,
+                    created_by="system",  # or current_user.id
+                    created_at=datetime.utcnow()
+                )
+                db.add(dataset_version)
+                db.commit()
+                db.refresh(dataset_version)
+
+    if not dataset_version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset version not found"
+            detail="Dataset or dataset version not found"
         )
 
     # Check if dataset is accessible by user (you might want to add access control)

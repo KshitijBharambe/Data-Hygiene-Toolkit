@@ -131,6 +131,7 @@ export interface Execution {
 
 export interface ExecutionCreate {
   dataset_version_id: string
+  rule_ids: string[]
 }
 
 // Issue types

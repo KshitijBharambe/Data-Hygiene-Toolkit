@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.upload import upload
 from app.routes.auth import auth
-from app.routes import rules, executions, processing, reports
+from app.routes import rules, executions, processing, reports, issues
 
 app = FastAPI(
     title="Data Hygiene Tool API",
@@ -26,6 +26,7 @@ app.include_router(rules.router)
 app.include_router(executions.router)
 app.include_router(processing.router)
 app.include_router(reports.router)
+app.include_router(issues.router)
 
 @app.get("/")
 def read_root():

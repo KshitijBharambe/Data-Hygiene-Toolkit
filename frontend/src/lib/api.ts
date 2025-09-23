@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 import {
-  User, UserCreate, UserLogin, TokenResponse,
+  User, UserCreate, UserLogin, TokenResponse, UserRole,
   Dataset, DatasetCreate, DatasetVersion, DatasetColumn,
   Rule, RuleCreate, RuleUpdate,
   Execution, ExecutionCreate,
@@ -174,10 +174,20 @@ class ApiClient {
 
   // Rule endpoints
   async getRules(page: number = 1, size: number = 20): Promise<PaginatedResponse<Rule>> {
-    const response = await this.client.get<PaginatedResponse<Rule>>('/rules', {
-      params: { page, size }
+    const response = await this.client.get<Rule[]>('/rules', {
+      params: {
+        active_only: false  // Get all rules, not just active ones
+      }
     })
-    return response.data
+    // Convert the array response to paginated format for consistency
+    const rules = Array.isArray(response.data) ? response.data : []
+    return {
+      items: rules,
+      total: rules.length,
+      page: 1,
+      size: rules.length,
+      pages: 1
+    }
   }
 
   async getRule(id: string): Promise<Rule> {
@@ -204,9 +214,22 @@ class ApiClient {
     return response.data
   }
 
+  async getRuleKinds(): Promise<any[]> {
+    const response = await this.client.get('/rules/kinds/available')
+    return response.data
+  }
+
+  async activateRule(id: string): Promise<void> {
+    await this.client.patch(`/rules/${id}/activate`)
+  }
+
+  async deactivateRule(id: string): Promise<void> {
+    await this.client.patch(`/rules/${id}/deactivate`)
+  }
+
   // Execution endpoints
   async getExecutions(page: number = 1, size: number = 20): Promise<PaginatedResponse<Execution>> {
-    const response = await this.client.get<PaginatedResponse<Execution>>('/executions', {
+    const response = await this.client.get<PaginatedResponse<Execution>>('/executions/', {
       params: { page, size }
     })
     return response.data
@@ -218,7 +241,7 @@ class ApiClient {
   }
 
   async createExecution(execution: ExecutionCreate): Promise<Execution> {
-    const response = await this.client.post<Execution>('/executions', execution)
+    const response = await this.client.post<Execution>('/executions/', execution)
     return response.data
   }
 
@@ -294,6 +317,47 @@ class ApiClient {
   async getDashboardOverview(): Promise<DashboardOverview> {
     const response = await this.client.get<DashboardOverview>('/reports/dashboard/overview')
     return response.data
+  }
+
+  // User management endpoints (admin only)
+  async getUsers(): Promise<User[]> {
+    const response = await this.client.get<User[]>('/auth/users')
+    return response.data
+  }
+
+  async updateUserRole(userId: string, role: UserRole): Promise<{ message: string; user: User }> {
+    const response = await this.client.put<{ message: string; user: User }>(`/auth/users/${userId}/role`, role)
+    return response.data
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.client.delete(`/auth/users/${userId}`)
+  }
+
+  async createUser(userData: UserCreate): Promise<User> {
+    const response = await this.client.post<User>('/auth/register', userData)
+    return response.data
+  }
+
+  // Generic HTTP methods for direct API access
+  async get<T = any>(url: string, config?: any): Promise<AxiosResponse<T>> {
+    return this.client.get<T>(url, config)
+  }
+
+  async post<T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> {
+    return this.client.post<T>(url, data, config)
+  }
+
+  async put<T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> {
+    return this.client.put<T>(url, data, config)
+  }
+
+  async patch<T = any>(url: string, data?: any, config?: any): Promise<AxiosResponse<T>> {
+    return this.client.patch<T>(url, data, config)
+  }
+
+  async delete<T = any>(url: string, config?: any): Promise<AxiosResponse<T>> {
+    return this.client.delete<T>(url, config)
   }
 }
 

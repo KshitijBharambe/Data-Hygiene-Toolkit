@@ -126,7 +126,7 @@ class ExecutionBase(BaseModel):
     dataset_version_id: str
 
 class ExecutionCreate(ExecutionBase):
-    pass
+    rule_ids: List[str]
 
 class ExecutionResponse(ExecutionBase):
     id: str

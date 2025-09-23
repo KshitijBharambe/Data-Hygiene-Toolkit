@@ -89,16 +89,16 @@ function getNavigationItems(dashboardData: any): NavItem[] {
     },
     {
       title: 'Execution',
-      icon: Play,
+      icon: Activity,
       children: [
         {
-          title: 'Run Checks',
-          href: '/execution/run',
+          title: 'Run Rules',
+          href: '/executions/create',
           icon: Play,
         },
         {
-          title: 'Execution History',
-          href: '/execution/history',
+          title: 'All Executions',
+          href: '/executions',
           icon: Activity,
           badge: dashboardData?.overview.total_executions?.toString(),
         },
