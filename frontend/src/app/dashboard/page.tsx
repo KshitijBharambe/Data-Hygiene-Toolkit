@@ -5,7 +5,7 @@ import { MainLayout } from '@/components/layout/main-layout'
 import { StatsCards } from '@/components/dashboard/stats-cards'
 import { QualityOverview } from '@/components/dashboard/quality-overview'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
-import { QuickActions } from '@/components/dashboard/quick-actions'
+// import { QuickActions } from '@/components/dashboard/quick-actions'
 
 export default function DashboardPage() {
   const { data: session } = useSession()
@@ -26,18 +26,10 @@ export default function DashboardPage() {
         {/* Stats Cards */}
         <StatsCards />
 
-        {/* Main Content Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - 2/3 width */}
-          <div className="lg:col-span-2 space-y-6">
-            <QualityOverview />
-            <RecentActivity />
-          </div>
-
-          {/* Right Column - 1/3 width */}
-          <div className="space-y-6">
-            <QuickActions />
-          </div>
+        {/* Main Content */}
+        <div className="space-y-6">
+          <QualityOverview />
+          <RecentActivity />
         </div>
       </div>
     </MainLayout>

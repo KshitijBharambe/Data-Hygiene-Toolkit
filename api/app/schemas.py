@@ -138,6 +138,7 @@ class ExecutionResponse(ExecutionBase):
     total_rules: Optional[int]
     rows_affected: Optional[int]
     columns_affected: Optional[int]
+    total_issues: Optional[int] = None
     summary: Optional[str]  # JSON string
     model_config = ConfigDict(from_attributes=True)
 

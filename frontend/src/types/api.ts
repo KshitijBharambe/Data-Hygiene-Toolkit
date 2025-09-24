@@ -126,6 +126,7 @@ export interface Execution {
   total_rules?: number
   rows_affected?: number
   columns_affected?: number
+  total_issues?: number
   summary?: string
 }
 

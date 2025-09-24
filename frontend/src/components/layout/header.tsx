@@ -38,41 +38,40 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center px-4">
-        {/* Mobile menu button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="md:hidden mr-2"
-          onClick={onMenuClick}
-          aria-label="Open navigation menu"
-        >
-          <Menu className="h-5 w-5" />
-        </Button>
-
-        {/* Logo */}
-        <div className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">DH</span>
+      <div className="flex h-16 items-center justify-between w-full px-6">
+        {/* Left section */}
+        <div className="flex items-center space-x-2 flex-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMenuClick}
+            aria-label="Toggle navigation menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center space-x-2">
+            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-primary-foreground font-bold text-sm">DH</span>
+            </div>
+            <h1 className="hidden md:block text-xl font-bold">Data Hygiene</h1>
           </div>
-          <h1 className="hidden md:block text-xl font-bold">Data Hygiene</h1>
         </div>
 
-        {/* Search */}
-        <div className="flex-1 max-w-md mx-6">
+        {/* Center section - Search */}
+        <div className="flex-1 max-w-lg">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search datasets, rules, executions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-9 w-full"
             />
           </div>
         </div>
 
-        {/* Right side buttons */}
-        <div className="flex items-center space-x-4">
+        {/* Right section */}
+        <div className="flex items-center space-x-4 flex-1 justify-end">
           {/* Theme toggle */}
           {mounted && (
             <Button

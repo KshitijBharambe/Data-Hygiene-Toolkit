@@ -297,8 +297,8 @@ export default function ExecutionsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{execution.rows_affected || 0}</span>
-                            {(execution.rows_affected || 0) > 0 && (
+                            <span>{execution.total_issues ?? 0}</span>
+                            {(execution.total_issues ?? 0) > 0 && (
                               <Badge variant="destructive" className="text-xs">
                                 Issues
                               </Badge>

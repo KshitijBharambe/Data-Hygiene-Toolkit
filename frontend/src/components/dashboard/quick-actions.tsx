@@ -25,42 +25,42 @@ interface QuickAction {
 const actions: QuickAction[] = [
   {
     title: 'Upload Dataset',
-    description: 'Add new data for quality analysis',
+    description: 'Add new data',
     icon: Upload,
     href: '/data/upload',
     variant: 'default'
   },
   {
     title: 'Run Quality Check',
-    description: 'Execute validation rules on datasets',
+    description: 'Execute validation',
     icon: Play,
     href: '/execution/run',
     variant: 'default'
   },
   {
     title: 'Create Rule',
-    description: 'Build new validation rule',
+    description: 'Build validation rule',
     icon: Plus,
     href: '/rules/create',
     variant: 'outline'
   },
   {
     title: 'View Reports',
-    description: 'Access quality insights and analytics',
+    description: 'Quality insights',
     icon: FileText,
     href: '/reports/quality',
     variant: 'outline'
   },
   {
     title: 'Export Data',
-    description: 'Download cleaned datasets',
+    description: 'Download results',
     icon: Download,
     href: '/reports/export',
     variant: 'outline'
   },
   {
     title: 'Browse Datasets',
-    description: 'Explore and manage data sources',
+    description: 'Manage data',
     icon: Database,
     href: '/data/datasets',
     variant: 'outline'
@@ -85,16 +85,13 @@ export function QuickActions() {
                 key={action.title}
                 variant={action.variant || 'outline'}
                 asChild
-                className="h-auto p-4 justify-start"
+                className="h-auto min-h-16 p-3 justify-start"
               >
                 <Link href={action.href}>
-                  <div className="flex items-start space-x-3">
-                    <Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                    <div className="text-left">
-                      <div className="font-medium">{action.title}</div>
-                      <div className="text-sm opacity-75 font-normal">
-                        {action.description}
-                      </div>
+                  <div className="flex items-start space-x-2 w-full px-2">
+                    <Icon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <div className="font-medium text-sm leading-tight break-words hyphens-auto flex-1 text-left">
+                      {action.title}
                     </div>
                   </div>
                 </Link>

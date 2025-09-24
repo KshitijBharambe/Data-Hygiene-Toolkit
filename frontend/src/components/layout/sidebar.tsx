@@ -148,7 +148,17 @@ function getNavigationItems(dashboardData: any): NavItem[] {
   ]
 }
 
-function NavItemComponent({ item, level = 0 }: { item: NavItem; level?: number }) {
+function NavItemComponent({
+  item,
+  level = 0,
+  isExpanded = false,
+  onToggleExpanded
+}: {
+  item: NavItem;
+  level?: number;
+  isExpanded?: boolean;
+  onToggleExpanded?: () => void;
+}) {
   const pathname = usePathname()
   const { data: session } = useSession()
 
@@ -158,24 +168,18 @@ function NavItemComponent({ item, level = 0 }: { item: NavItem; level?: number }
     (child.children && child.children.some(grandchild => grandchild.href === pathname))
   )
 
-  // Initialize isExpanded state - start with false to avoid hydration issues
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  // Set expanded state based on active children after mount
-  useEffect(() => {
-    if (hasActiveChild) {
-      setIsExpanded(true)
-    }
-  }, [hasActiveChild, pathname])
-
   // Check if user has permission to see this item - after hooks
   if (item.roles && !item.roles.includes(session?.user?.role || '')) {
     return null
   }
 
+  // For items with children, use the expanded state from parent
+  // For items without children, expand if they have active children
+  const shouldBeExpanded = item.children ? isExpanded || hasActiveChild : false
+
   const handleClick = () => {
-    if (item.children) {
-      setIsExpanded(!isExpanded)
+    if (item.children && onToggleExpanded) {
+      onToggleExpanded()
     }
   }
 
@@ -196,7 +200,7 @@ function NavItemComponent({ item, level = 0 }: { item: NavItem; level?: number }
       )}
       {item.children && (
         <div className="ml-auto">
-          {isExpanded ? (
+          {shouldBeExpanded ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
             <ChevronRight className="h-4 w-4" />
@@ -218,10 +222,16 @@ function NavItemComponent({ item, level = 0 }: { item: NavItem; level?: number }
         </button>
       )}
 
-      {item.children && isExpanded && (
+      {item.children && shouldBeExpanded && (
         <div className="mt-1 space-y-1">
           {item.children.map((child, index) => (
-            <NavItemComponent key={index} item={child} level={level + 1} />
+            <NavItemComponent
+              key={index}
+              item={child}
+              level={level + 1}
+              isExpanded={false}
+              onToggleExpanded={undefined}
+            />
           ))}
         </div>
       )}
@@ -232,6 +242,58 @@ function NavItemComponent({ item, level = 0 }: { item: NavItem; level?: number }
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { data: dashboardData } = useDashboardOverview()
   const navigationItems = getNavigationItems(dashboardData)
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
+  const [mounted, setMounted] = useState(false)
+  const pathname = usePathname()
+
+  // Initialize expanded states from localStorage
+  useEffect(() => {
+    const savedStates = localStorage.getItem('sidebar-expanded-items')
+    if (savedStates) {
+      setExpandedItems(JSON.parse(savedStates))
+    }
+    setMounted(true)
+  }, [])
+
+  // Auto-expand items with active children
+  useEffect(() => {
+    if (mounted && navigationItems) {
+      setExpandedItems(prev => {
+        const newExpandedItems = { ...prev }
+        let hasChanges = false
+
+        navigationItems.forEach(item => {
+          if (item.children) {
+            const hasActiveChild = item.children.some(child =>
+              child.href === pathname ||
+              (child.children && child.children.some(grandchild => grandchild.href === pathname))
+            )
+
+            if (hasActiveChild && !newExpandedItems[item.title]) {
+              newExpandedItems[item.title] = true
+              hasChanges = true
+            }
+          }
+        })
+
+        return hasChanges ? newExpandedItems : prev
+      })
+    }
+  }, [pathname, mounted, navigationItems])
+
+  // Persist expanded states to localStorage
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('sidebar-expanded-items', JSON.stringify(expandedItems))
+    }
+  }, [expandedItems, mounted])
+
+  const toggleExpanded = (itemTitle: string) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [itemTitle]: !prev[itemTitle]
+    }))
+  }
 
   return (
     <>
@@ -245,11 +307,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside className={cn(
-        // Mobile: sidebar slides in/out
+        // Base: fixed sidebar that slides in/out
         'fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 bg-background border-r transition-transform duration-200 ease-in-out',
-        // Desktop: sidebar is always visible
-        'md:translate-x-0',
-        // Mobile state
+        // State: show/hide based on isOpen prop
         isOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <div className="flex h-full flex-col">
@@ -264,7 +324,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <nav className="space-y-2">
               {navigationItems.map((item, index) => (
-                <NavItemComponent key={index} item={item} />
+                <NavItemComponent
+                  key={index}
+                  item={item}
+                  isExpanded={expandedItems[item.title] || false}
+                  onToggleExpanded={() => toggleExpanded(item.title)}
+                />
               ))}
             </nav>
           </div>

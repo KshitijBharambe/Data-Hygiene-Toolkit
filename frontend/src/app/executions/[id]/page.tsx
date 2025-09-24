@@ -99,9 +99,17 @@ export default function ExecutionDetailPage() {
     )
   }
 
-  const duration = execution.finished_at && execution.started_at
-    ? Math.round((new Date(execution.finished_at).getTime() - new Date(execution.started_at).getTime()) / 1000)
-    : null
+  const duration = (() => {
+    // Try to get duration from summary first
+    if (summary?.duration_seconds) {
+      return Math.round(summary.duration_seconds)
+    }
+    // Fallback to calculating from timestamps
+    if (execution.finished_at && execution.started_at) {
+      return Math.round((new Date(execution.finished_at).getTime() - new Date(execution.started_at).getTime()) / 1000)
+    }
+    return null
+  })()
 
   const issues = issuesData?.items || []
 
@@ -178,7 +186,7 @@ export default function ExecutionDetailPage() {
               <Bug className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{issues.length}</div>
+              <div className="text-2xl font-bold text-red-600">{execution.total_issues ?? issues.length}</div>
             </CardContent>
           </Card>
         </div>

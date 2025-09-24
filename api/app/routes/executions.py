@@ -17,9 +17,10 @@ from app.services.rule_engine import RuleEngineService
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
 
 
-@router.get("/", response_model=List[ExecutionResponse])
+@router.get("/", response_model=Dict[str, Any])
 async def list_executions(
-    limit: int = Query(20, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     status_filter: Optional[ExecutionStatus] = Query(None, description="Filter by execution status"),
     dataset_id: Optional[str] = Query(None, description="Filter by dataset ID"),
     db: Session = Depends(get_session),
@@ -36,8 +37,29 @@ async def list_executions(
     if dataset_id:
         query = query.join(DatasetVersion).filter(DatasetVersion.dataset_id == dataset_id)
 
-    executions = query.order_by(Execution.started_at.desc()).limit(limit).all()
-    return [ExecutionResponse.model_validate(execution) for execution in executions]
+    # Get total count for pagination
+    total = query.count()
+
+    # Apply pagination
+    offset = (page - 1) * size
+    executions = query.order_by(Execution.started_at.desc()).offset(offset).limit(size).all()
+
+    # Enrich executions with issue counts
+    execution_responses = []
+    for execution in executions:
+        execution_dict = execution.__dict__.copy()
+        # Get issue count for this execution
+        issue_count = db.query(Issue).filter(Issue.execution_id == execution.id).count()
+        execution_dict['total_issues'] = issue_count
+        execution_responses.append(ExecutionResponse.model_validate(execution_dict))
+
+    return {
+        "items": execution_responses,
+        "total": total,
+        "page": page,
+        "size": size,
+        "pages": (total + size - 1) // size
+    }
 
 
 @router.get("/{execution_id}", response_model=ExecutionResponse)
@@ -56,7 +78,12 @@ async def get_execution(
             detail="Execution not found"
         )
 
-    return ExecutionResponse.model_validate(execution)
+    # Enrich execution with issue count
+    execution_dict = execution.__dict__.copy()
+    issue_count = db.query(Issue).filter(Issue.execution_id == execution_id).count()
+    execution_dict['total_issues'] = issue_count
+
+    return ExecutionResponse.model_validate(execution_dict)
 
 
 @router.post("/", response_model=ExecutionResponse)
