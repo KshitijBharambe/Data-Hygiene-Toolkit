@@ -28,6 +28,7 @@ export default function LoginPage() {
         email,
         password,
         redirect: false,
+        callbackUrl: '/dashboard',
       })
 
       if (result?.error) {
@@ -55,6 +56,7 @@ export default function LoginPage() {
         email: 'demo@datahygiene.com',
         password: 'demo123',
         redirect: false,
+        callbackUrl: '/dashboard',
       })
 
       if (result?.error) {
