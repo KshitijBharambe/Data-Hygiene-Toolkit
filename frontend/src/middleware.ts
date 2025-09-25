@@ -25,6 +25,7 @@ export const config = {
     // - favicon.ico (favicon file)
     // - auth (auth pages)
     // - test (test page)
-    '/((?!api|_next/static|_next/image|favicon.ico|auth|test).*)',
+    // - root path (landing page)
+    '/((?!api|_next/static|_next/image|favicon|auth|test|$).*)',
   ],
 }
