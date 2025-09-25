@@ -3,10 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Database, Shield, Zap, CheckCircle } from "lucide-react";
+import { ArrowRight, Database, Shield, Zap } from "lucide-react";
 import { gsap } from "gsap";
 import LiquidEther from "./LiquidEther";
-import { fa } from "zod/v4/locales";
 
 export default function LandingPage() {
   const router = useRouter();
