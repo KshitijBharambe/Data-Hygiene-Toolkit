@@ -32,7 +32,7 @@ class ApiClient {
   private token: string | null = null;
 
   constructor(
-    baseURL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    baseURL: string = process.env.NEXT_PUBLIC_API_URL_PROD || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
   ) {
     this.client = axios.create({
       baseURL,
