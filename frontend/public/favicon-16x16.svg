@@ -1,0 +1,12 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="16" height="16" rx="2" fill="#7c3aed"/>
+
+  <!-- Database icon (simplified for 16px) -->
+  <ellipse cx="8" cy="5" rx="4" ry="1.5" stroke="#ffffff" stroke-width="0.75" fill="none"/>
+  <path d="M4 5v3c0 0.828 1.791 1.5 4 1.5s4-0.672 4-1.5V5" stroke="#ffffff" stroke-width="0.75" fill="none"/>
+  <path d="M4 8v3c0 0.828 1.791 1.5 4 1.5s4-0.672 4-1.5V8" stroke="#ffffff" stroke-width="0.75" fill="none"/>
+
+  <!-- Checkmark/quality indicator -->
+  <circle cx="11" cy="11" r="3" fill="#10b981"/>
+  <path d="M9.5 11l1 1 2-2" stroke="#ffffff" stroke-width="0.75" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

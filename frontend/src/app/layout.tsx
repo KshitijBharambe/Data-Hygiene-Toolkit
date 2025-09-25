@@ -19,6 +19,17 @@ export const metadata: Metadata = {
   title: "Data Hygiene Tool",
   description: "Modern data quality management and cleansing platform",
   keywords: ["data quality", "data cleansing", "data validation", "ETL"],
+  icons: {
+    icon: [
+      { url: '/favicon-16x16.svg', sizes: '16x16', type: 'image/svg+xml' },
+      { url: '/favicon-32x32.svg', sizes: '32x32', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/favicon.svg',
+    apple: { url: '/apple-touch-icon.svg', sizes: '180x180', type: 'image/svg+xml' },
+  },
+  manifest: '/site.webmanifest',
+  themeColor: '#7c3aed',
 };
 
 export default function RootLayout({

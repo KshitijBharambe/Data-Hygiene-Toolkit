@@ -1,0 +1,12 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" rx="40" fill="#7c3aed"/>
+
+  <!-- Database icon -->
+  <ellipse cx="90" cy="60" rx="45" ry="16" stroke="#ffffff" stroke-width="8" fill="none"/>
+  <path d="M45 60v33c0 8.837 20.147 16 45 16s45-7.163 45-16V60" stroke="#ffffff" stroke-width="8" fill="none"/>
+  <path d="M45 93v33c0 8.837 20.147 16 45 16s45-7.163 45-16V93" stroke="#ffffff" stroke-width="8" fill="none"/>
+
+  <!-- Checkmark/quality indicator -->
+  <circle cx="125" cy="125" r="32" fill="#10b981"/>
+  <path d="M110 125l10 10 22-22" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
