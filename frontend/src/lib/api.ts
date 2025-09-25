@@ -123,7 +123,7 @@ class ApiClient {
 
   // Dataset endpoints
   async getDatasets(): Promise<PaginatedResponse<Dataset>> {
-    const response = await this.client.get<Dataset[]>("/data/datasets/");
+    const response = await this.client.get<Dataset[]>("/data/datasets");
     // Convert the array response to paginated format for consistency
     const datasets = Array.isArray(response.data) ? response.data : [];
     return {
@@ -136,7 +136,7 @@ class ApiClient {
   }
 
   async getDataset(id: string): Promise<Dataset> {
-    const response = await this.client.get<Dataset>(`/data/datasets/${id}/`);
+    const response = await this.client.get<Dataset>(`/data/datasets/${id}`);
     return response.data;
   }
 
@@ -157,7 +157,7 @@ class ApiClient {
   }
 
   async deleteDataset(id: string): Promise<void> {
-    await this.client.delete(`/data/datasets/${id}/`);
+    await this.client.delete(`/data/datasets/${id}`);
   }
 
   async uploadFile(

@@ -160,7 +160,7 @@ export function useIssuesSummary(days: number = 30) {
 
       try {
         const response = await apiClient.get<IssuesSummary>(
-          `/issues/statistics/summary/?days=${days}`
+          `/issues/statistics/summary?days=${days}`
         );
         console.log("Issues summary success:", response.data);
         return response.data;
