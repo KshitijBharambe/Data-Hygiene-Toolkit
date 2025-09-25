@@ -223,7 +223,7 @@ class ApiClient {
 
   // Rule endpoints
   async getRules(): Promise<PaginatedResponse<Rule>> {
-    const response = await this.client.get<Rule[]>("/rules", {
+    const response = await this.client.get<Rule[]>("/rules/", {
       params: {
         active_only: false, // Get all rules, not just active ones
       },
@@ -240,45 +240,45 @@ class ApiClient {
   }
 
   async getRule(id: string): Promise<Rule> {
-    const response = await this.client.get<Rule>(`/rules/${id}`);
+    const response = await this.client.get<Rule>(`/rules/${id}/`);
     return response.data;
   }
 
   async createRule(rule: RuleCreate): Promise<Rule> {
-    const response = await this.client.post<Rule>("/rules", rule);
+    const response = await this.client.post<Rule>("/rules/", rule);
     return response.data;
   }
 
   async updateRule(id: string, rule: RuleUpdate): Promise<Rule> {
-    const response = await this.client.put<Rule>(`/rules/${id}`, rule);
+    const response = await this.client.put<Rule>(`/rules/${id}/`, rule);
     return response.data;
   }
 
   async deleteRule(id: string): Promise<void> {
-    await this.client.delete(`/rules/${id}`);
+    await this.client.delete(`/rules/${id}/`);
   }
 
   async testRule(
     ruleId: string,
     testData: RuleTestRequest
   ): Promise<{ success: boolean; message: string; results?: unknown }> {
-    const response = await this.client.post(`/rules/${ruleId}/test`, testData);
+    const response = await this.client.post(`/rules/${ruleId}/test/`, testData);
     return response.data;
   }
 
   async getRuleKinds(): Promise<
     { kind: string; description: string; parameters: unknown }[]
   > {
-    const response = await this.client.get("/rules/kinds/available");
+    const response = await this.client.get("/rules/kinds/available/");
     return response.data;
   }
 
   async activateRule(id: string): Promise<void> {
-    await this.client.patch(`/rules/${id}/activate`);
+    await this.client.patch(`/rules/${id}/activate/`);
   }
 
   async deactivateRule(id: string): Promise<void> {
-    await this.client.patch(`/rules/${id}/deactivate`);
+    await this.client.patch(`/rules/${id}/deactivate/`);
   }
 
   // Execution endpoints
