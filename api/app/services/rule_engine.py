@@ -752,69 +752,108 @@ class RuleEngineService:
             # Load dataset data (this would need to be implemented based on how data is stored)
             # For now, assuming we have a method to load the dataset as DataFrame
             df = self._load_dataset_as_dataframe(dataset_version)
-            
+
             execution.total_rows = len(df)
             all_issues = []
-            
+            successful_rules = 0
+            failed_rules = 0
+
             # Execute each rule
-            execution_rule = None
             for rule in rules:
+                execution_rule = ExecutionRule(
+                    execution_id=execution.id,
+                    rule_id=rule.id
+                )
+                self.db.add(execution_rule)
+
                 try:
-                    execution_rule = ExecutionRule(
-                        execution_id=execution.id,
-                        rule_id=rule.id
-                    )
-                    self.db.add(execution_rule)
-                    
-                    # Get validator for this rule type
+                    # Validate rule has required attributes
                     rule_kind = getattr(rule, 'kind', None)
                     if rule_kind is None:
                         execution_rule.note = "Rule has no kind specified"
+                        failed_rules += 1
                         continue
+
+                    # Get validator for this rule type
                     validator_class = self.validators.get(rule_kind)
                     if not validator_class:
                         execution_rule.note = f"No validator available for rule kind: {rule_kind}"
+                        failed_rules += 1
                         continue
-                    
+
                     # Run validation
                     validator = validator_class(rule, df, self.db)
                     issues = validator.validate()
-                    
-                    # Create issue records
+
+                    # Validate issues structure
+                    if not isinstance(issues, list):
+                        execution_rule.note = f"Validator returned invalid issues format: {type(issues)}"
+                        failed_rules += 1
+                        continue
+
+                    # Create issue records with validation
+                    rule_issues = []
                     for issue_data in issues:
-                        issue = Issue(
-                            execution_id=execution.id,
-                            rule_id=rule.id,
-                            row_index=issue_data['row_index'],
-                            column_name=issue_data['column_name'],
-                            current_value=issue_data['current_value'],
-                            suggested_value=issue_data.get('suggested_value'),
-                            message=issue_data['message'],
-                            category=issue_data['category'],
-                            severity=rule.criticality
-                        )
-                        self.db.add(issue)
-                        all_issues.append(issue)
-                    
+                        try:
+                            # Validate required fields
+                            if 'row_index' not in issue_data or 'column_name' not in issue_data:
+                                continue
+
+                            issue = Issue(
+                                execution_id=execution.id,
+                                rule_id=rule.id,
+                                row_index=issue_data['row_index'],
+                                column_name=issue_data['column_name'],
+                                current_value=issue_data.get('current_value'),
+                                suggested_value=issue_data.get('suggested_value'),
+                                message=issue_data.get('message', 'Data quality issue found'),
+                                category=issue_data.get('category', 'unknown'),
+                                severity=rule.criticality
+                            )
+                            self.db.add(issue)
+                            rule_issues.append(issue)
+                            all_issues.append(issue)
+                        except Exception as issue_error:
+                            print(f"Error creating issue record: {str(issue_error)}")
+                            continue
+
                     # Update execution rule stats
-                    execution_rule.error_count = len(issues)
-                    execution_rule.rows_flagged = len(set(i['row_index'] for i in issues))
-                    execution_rule.cols_flagged = len(set(i['column_name'] for i in issues))
-                    
-                except Exception as e:
-                    execution_rule.note = f"Error executing rule: {str(e)}"
-            
-            # Update execution summary
-            execution.status = ExecutionStatus.succeeded
+                    execution_rule.error_count = len(rule_issues)
+                    execution_rule.rows_flagged = len(set(i.row_index for i in rule_issues)) if rule_issues else 0
+                    execution_rule.cols_flagged = len(set(i.column_name for i in rule_issues)) if rule_issues else 0
+                    successful_rules += 1
+
+                except Exception as rule_error:
+                    execution_rule.note = f"Error executing rule: {str(rule_error)}"
+                    failed_rules += 1
+                    print(f"Rule execution error for rule {rule.id}: {str(rule_error)}")
+
+            # Determine final execution status
+            if failed_rules == 0:
+                execution.status = ExecutionStatus.succeeded
+            elif successful_rules > 0:
+                execution.status = ExecutionStatus.partially_succeeded
+            else:
+                execution.status = ExecutionStatus.failed
+
             execution.finished_at = datetime.now(timezone.utc)
-            execution.rows_affected = len(set(issue.row_index for issue in all_issues))
-            execution.columns_affected = len(set(issue.column_name for issue in all_issues))
+
+            # Calculate summary statistics safely
+            if all_issues:
+                execution.rows_affected = len(set(issue.row_index for issue in all_issues))
+                execution.columns_affected = len(set(issue.column_name for issue in all_issues))
+            else:
+                execution.rows_affected = 0
+                execution.columns_affected = 0
+
             execution.summary = json.dumps({
                 'total_issues': len(all_issues),
+                'successful_rules': successful_rules,
+                'failed_rules': failed_rules,
                 'issues_by_severity': self._count_issues_by_severity(all_issues),
                 'issues_by_category': self._count_issues_by_category(all_issues)
             })
-            
+
             self.db.commit()
             
         except Exception as e:
@@ -831,16 +870,31 @@ class RuleEngineService:
     
     def _load_dataset_as_dataframe(self, dataset_version) -> pd.DataFrame:
         """Load dataset version as pandas DataFrame"""
-        from app.services.data_import import DataImportService
-
         try:
+            from app.services.data_import import DataImportService
+
             # Use the data import service to load the dataset file
             data_service = DataImportService(self.db)
             df = data_service.load_dataset_file(
                 dataset_version.dataset_id,
                 dataset_version.version_no
             )
+
+            # Validate that we got a valid DataFrame
+            if df is None or df.empty:
+                raise ValueError(f"Dataset version {dataset_version.id} contains no data")
+
             return df
+        except ImportError as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to import data service: {str(e)}"
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Dataset file not found for version {dataset_version.id}: {str(e)}"
+            )
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

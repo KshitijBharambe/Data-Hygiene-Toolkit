@@ -65,8 +65,8 @@ async def login_user(
             detail="Invalid email or password"
         )
     
-    # Create access token
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Create access token (indefinite for demo if ACCESS_TOKEN_EXPIRE_MINUTES is None)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) if ACCESS_TOKEN_EXPIRE_MINUTES else None
     access_token = create_access_token(
         data={"sub": user.id, "email": user.email, "role": user.role.value},
         expires_delta=access_token_expires

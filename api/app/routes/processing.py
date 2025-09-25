@@ -382,7 +382,7 @@ async def get_processing_history(
     executions = (
         db.query(Execution)
         .filter(Execution.dataset_version_id.in_([v.id for v in versions]))
-        .order_by(Execution.created_at.asc())
+        .order_by(Execution.started_at.asc())
         .all()
     )
 

@@ -11,7 +11,7 @@ from app.database import get_session
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = None  # Indefinite for demo
 
 security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -24,11 +24,13 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
+    # For demo purposes, don't set expiration if ACCESS_TOKEN_EXPIRE_MINUTES is None
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
-    else:
+    elif ACCESS_TOKEN_EXPIRE_MINUTES is not None:
         expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+        to_encode.update({"exp": expire})
+    # If ACCESS_TOKEN_EXPIRE_MINUTES is None, don't add exp claim for indefinite tokens
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 

@@ -49,7 +49,7 @@ class DataQualityService:
         """
         cleaned_df = df.copy()
         report = {
-            "original_missing_count": df.isnull().sum().to_dict(),
+            "original_missing_count": {k: int(v) for k, v in df.isnull().sum().to_dict().items()},
             "actions_taken": {},
             "final_missing_count": {},
             "rows_dropped": 0
@@ -73,7 +73,7 @@ class DataQualityService:
                 if column not in report["actions_taken"]:
                     report["actions_taken"][column] = action
 
-        report["final_missing_count"] = cleaned_df.isnull().sum().to_dict()
+        report["final_missing_count"] = {k: int(v) for k, v in cleaned_df.isnull().sum().to_dict().items()}
         report["rows_dropped"] = len(df) - len(cleaned_df)
 
         return cleaned_df, report
@@ -372,8 +372,8 @@ class DataQualityService:
 
         valid_mask = series.apply(is_valid_iban)
         return {
-            "valid_count": valid_mask.sum(),
-            "invalid_count": (~valid_mask).sum(),
+            "valid_count": int(valid_mask.sum()),
+            "invalid_count": int((~valid_mask).sum()),
             "message": "IBAN format validation completed"
         }
 
@@ -393,8 +393,8 @@ class DataQualityService:
 
         valid_mask = series.apply(is_valid_country)
         return {
-            "valid_count": valid_mask.sum(),
-            "invalid_count": (~valid_mask).sum(),
+            "valid_count": int(valid_mask.sum()),
+            "invalid_count": int((~valid_mask).sum()),
             "message": "Country code validation completed"
         }
 
@@ -417,8 +417,8 @@ class DataQualityService:
 
         valid_mask = series.apply(is_valid_postal)
         return {
-            "valid_count": valid_mask.sum(),
-            "invalid_count": (~valid_mask).sum(),
+            "valid_count": int(valid_mask.sum()),
+            "invalid_count": int((~valid_mask).sum()),
             "message": f"Postal code validation for {country} completed"
         }
 
@@ -432,8 +432,8 @@ class DataQualityService:
 
         valid_mask = series.apply(is_valid_length)
         return {
-            "valid_count": valid_mask.sum(),
-            "invalid_count": (~valid_mask).sum(),
+            "valid_count": int(valid_mask.sum()),
+            "invalid_count": int((~valid_mask).sum()),
             "message": f"Length validation (min: {min_len}, max: {max_len}) completed"
         }
 
@@ -446,8 +446,8 @@ class DataQualityService:
 
         valid_mask = series.apply(matches_pattern)
         return {
-            "valid_count": valid_mask.sum(),
-            "invalid_count": (~valid_mask).sum(),
+            "valid_count": int(valid_mask.sum()),
+            "invalid_count": int((~valid_mask).sum()),
             "message": f"Regex pattern validation completed"
         }
 
@@ -593,8 +593,8 @@ class DataQualityService:
             "current_version": latest_version.version_number,
             "total_rows": len(df),
             "total_columns": len(df.columns),
-            "missing_data_percentage": (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100,
-            "duplicate_rows": df.duplicated().sum(),
+            "missing_data_percentage": float((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100),
+            "duplicate_rows": int(df.duplicated().sum()),
             "total_issues_found": total_issues,
             "total_fixes_applied": total_fixes,
             "data_quality_score": quality_score,
@@ -636,11 +636,11 @@ class DataQualityService:
             else:
                 consistency_scores.append(0)
 
-        consistency = np.mean(consistency_scores) if consistency_scores else 100
+        consistency = float(np.mean(consistency_scores)) if consistency_scores else 100
         factors.append(consistency)
 
         # Overall score is weighted average
-        return np.mean(factors)
+        return float(np.mean(factors))
 
     def _analyze_column_quality(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
         """Analyze quality metrics for each column"""
@@ -650,25 +650,25 @@ class DataQualityService:
             series = df[column]
             analysis = {
                 "data_type": str(series.dtype),
-                "missing_count": series.isnull().sum(),
-                "missing_percentage": (series.isnull().sum() / len(series)) * 100,
-                "unique_values": series.nunique(),
-                "duplicate_count": len(series) - series.nunique(),
+                "missing_count": int(series.isnull().sum()),
+                "missing_percentage": float((series.isnull().sum() / len(series)) * 100),
+                "unique_values": int(series.nunique()),
+                "duplicate_count": int(len(series) - series.nunique()),
             }
 
             # Type-specific analysis
             if series.dtype in ['int64', 'float64']:
                 analysis.update({
-                    "min_value": series.min(),
-                    "max_value": series.max(),
-                    "mean_value": series.mean(),
-                    "outliers_count": self._count_outliers(series)
+                    "min_value": float(series.min()) if not pd.isna(series.min()) else None,
+                    "max_value": float(series.max()) if not pd.isna(series.max()) else None,
+                    "mean_value": float(series.mean()) if not pd.isna(series.mean()) else None,
+                    "outliers_count": int(self._count_outliers(series))
                 })
             elif series.dtype == 'object':
                 analysis.update({
-                    "avg_length": series.astype(str).str.len().mean(),
-                    "min_length": series.astype(str).str.len().min(),
-                    "max_length": series.astype(str).str.len().max(),
+                    "avg_length": float(series.astype(str).str.len().mean()),
+                    "min_length": int(series.astype(str).str.len().min()),
+                    "max_length": int(series.astype(str).str.len().max()),
                 })
 
             column_analysis[column] = analysis

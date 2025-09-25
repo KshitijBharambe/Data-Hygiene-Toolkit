@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,7 @@ import {
   AlertTriangle,
   CheckCircle,
   Download,
-  Calendar,
   FileText,
-  Activity,
   Database
 } from 'lucide-react'
 import { useDatasets } from '@/lib/hooks/useDatasets'
@@ -23,7 +21,8 @@ import { useDatasets } from '@/lib/hooks/useDatasets'
 export default function QualityReportsPage() {
   const [selectedDataset, setSelectedDataset] = useState<string>('')
   const [timeRange, setTimeRange] = useState<string>('30')
-  const { datasets, isLoading } = useDatasets()
+  const { data: datasetsData } = useDatasets()
+  const datasets = datasetsData?.items || []
 
   return (
     <MainLayout>

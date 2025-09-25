@@ -1,164 +1,192 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
-import { MainLayout } from '@/components/layout/main-layout'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, File } from 'lucide-react'
-import apiClient from '@/lib/api'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { MainLayout } from "@/components/layout/main-layout";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
+import {
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
+  CheckCircle,
+  File,
+} from "lucide-react";
+import apiClient from "@/lib/api";
 
 export default function UploadDataPage() {
-  const [file, setFile] = useState<File | null>(null)
-  const [datasetName, setDatasetName] = useState('')
-  const [description, setDescription] = useState('')
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  const router = useRouter()
-  const { data: session } = useSession()
+  const [file, setFile] = useState<File | null>(null);
+  const [datasetName, setDatasetName] = useState("");
+  const [description, setDescription] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const router = useRouter();
+  const { data: session } = useSession();
 
   // Ensure token is set when session is available
   useEffect(() => {
     if (session?.accessToken) {
-      apiClient.setToken(session.accessToken as string)
+      apiClient.setToken(session.accessToken as string);
     }
-  }, [session])
+  }, [session]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
+    const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      setFile(selectedFile)
-      setError('')
+      setFile(selectedFile);
+      setError("");
       // Auto-generate dataset name from filename if not set
       if (!datasetName) {
-        const name = selectedFile.name.replace(/\.[^/.]+$/, '')
-        setDatasetName(name)
+        const name = selectedFile.name.replace(/\.[^/.]+$/, "");
+        setDatasetName(name);
       }
     }
-  }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
+    e.preventDefault();
+  };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const droppedFile = e.dataTransfer.files[0]
+    e.preventDefault();
+    const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
-      setFile(droppedFile)
-      setError('')
+      setFile(droppedFile);
+      setError("");
       if (!datasetName) {
-        const name = droppedFile.name.replace(/\.[^/.]+$/, '')
-        setDatasetName(name)
+        const name = droppedFile.name.replace(/\.[^/.]+$/, "");
+        setDatasetName(name);
       }
     }
-  }
+  };
 
   const validateFile = (file: File): string | null => {
     const allowedTypes = [
-      'text/csv',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain'
-    ]
+      "text/csv",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/plain",
+    ];
 
-    const allowedExtensions = ['.csv', '.xlsx', '.xls', '.txt']
-    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+    const allowedExtensions = [".csv", ".xlsx", ".xls", ".txt"];
+    const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
 
-    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
-      return 'Please select a CSV, Excel, or text file'
+    if (
+      !allowedTypes.includes(file.type) &&
+      !allowedExtensions.includes(fileExtension)
+    ) {
+      return "Please select a CSV, Excel, or text file";
     }
 
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      return 'File size must be less than 50MB'
+    if (file.size > 50 * 1024 * 1024) {
+      // 50MB limit
+      return "File size must be less than 50MB";
     }
 
-    return null
-  }
+    return null;
+  };
 
   const handleUpload = async () => {
     if (!file) {
-      setError('Please select a file')
-      return
+      setError("Please select a file");
+      return;
     }
 
-    const validationError = validateFile(file)
+    const validationError = validateFile(file);
     if (validationError) {
-      setError(validationError)
-      return
+      setError(validationError);
+      return;
     }
 
     if (!datasetName.trim()) {
-      setError('Please enter a dataset name')
-      return
+      setError("Please enter a dataset name");
+      return;
     }
 
-    setIsUploading(true)
-    setError('')
-    setSuccess('')
-    setUploadProgress(0)
+    setIsUploading(true);
+    setError("");
+    setSuccess("");
+    setUploadProgress(0);
 
     try {
       // Force set token from session if available
       if (session?.accessToken) {
-        apiClient.setToken(session.accessToken as string)
+        apiClient.setToken(session.accessToken as string);
       }
 
       // Simulate upload progress
       const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
+        setUploadProgress((prev) => {
           if (prev >= 90) {
-            clearInterval(progressInterval)
-            return 90
+            clearInterval(progressInterval);
+            return 90;
           }
-          return prev + 10
-        })
-      }, 200)
+          return prev + 10;
+        });
+      }, 200);
 
-      const response = await apiClient.uploadFile(file, datasetName.trim(), description.trim() || undefined)
+      await apiClient.uploadFile(
+        file,
+        datasetName.trim(),
+        description.trim() || undefined
+      );
 
-      clearInterval(progressInterval)
-      setUploadProgress(100)
+      clearInterval(progressInterval);
+      setUploadProgress(100);
 
-      setSuccess(`File uploaded successfully! Dataset "${datasetName}" has been created.`)
+      setSuccess(
+        `File uploaded successfully! Dataset "${datasetName}" has been created.`
+      );
 
       // Reset form
-      setFile(null)
-      setDatasetName('')
-      setDescription('')
+      setFile(null);
+      setDatasetName("");
+      setDescription("");
 
       // Redirect to datasets page after a short delay
       setTimeout(() => {
-        router.push('/data/datasets')
-      }, 2000)
-
-    } catch (error: any) {
-      setUploadProgress(0)
-      if (error.response?.data?.detail) {
-        setError(error.response.data.detail)
+        router.push("/data/datasets");
+      }, 2000);
+    } catch (error: unknown) {
+      setUploadProgress(0);
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as {
+          response?: { data?: { detail?: string } };
+        };
+        if (axiosError.response?.data?.detail) {
+          setError(axiosError.response.data.detail);
+        } else {
+          setError("Failed to upload file. Please try again.");
+        }
       } else {
-        setError('Failed to upload file. Please try again.')
+        setError("Failed to upload file. Please try again.");
       }
     } finally {
-      setIsUploading(false)
+      setIsUploading(false);
     }
-  }
+  };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   return (
     <MainLayout>
@@ -189,7 +217,7 @@ export default function UploadDataPage() {
                 className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer"
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById('file-input')?.click()}
+                onClick={() => document.getElementById("file-input")?.click()}
               >
                 <div className="space-y-4">
                   <div className="mx-auto w-12 h-12 text-muted-foreground">
@@ -197,10 +225,13 @@ export default function UploadDataPage() {
                   </div>
                   <div>
                     <p className="text-lg font-medium">
-                      {file ? file.name : 'Drop your file here, or click to browse'}
+                      {file
+                        ? file.name
+                        : "Drop your file here, or click to browse"}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Supports CSV, Excel (.xlsx, .xls), and text files up to 50MB
+                      Supports CSV, Excel (.xlsx, .xls), and text files up to
+                      50MB
                     </p>
                     {file && (
                       <p className="text-sm text-muted-foreground mt-2">
@@ -277,7 +308,7 @@ export default function UploadDataPage() {
                 disabled={!file || isUploading || !datasetName.trim()}
                 className="w-full"
               >
-                {isUploading ? 'Uploading...' : 'Upload Dataset'}
+                {isUploading ? "Uploading..." : "Upload Dataset"}
               </Button>
             </CardContent>
           </Card>
@@ -334,5 +365,5 @@ export default function UploadDataPage() {
         </div>
       </div>
     </MainLayout>
-  )
+  );
 }

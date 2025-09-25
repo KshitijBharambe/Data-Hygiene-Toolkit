@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -52,7 +51,7 @@ interface ColumnStats {
   isNullable: boolean
 }
 
-export default function DataProfilePage() {
+function DataProfileContent() {
   const searchParams = useSearchParams()
   const datasetId = searchParams.get('dataset')
 
@@ -80,7 +79,7 @@ export default function DataProfilePage() {
     try {
       const response = await apiClient.getDatasets()
       setDatasets(response.items || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load datasets:', error)
       setError('Failed to load datasets. Please try again.')
     }
@@ -92,7 +91,7 @@ export default function DataProfilePage() {
       setError('')
       const profileData = await apiClient.getDataProfile(id)
       setProfile(profileData)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load data profile:', error)
       setError('Failed to load data profile. Please try again.')
     } finally {
@@ -509,5 +508,13 @@ export default function DataProfilePage() {
         )}
       </div>
     </MainLayout>
+  )
+}
+
+export default function DataProfilePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+      <DataProfileContent />
+    </Suspense>
   )
 }

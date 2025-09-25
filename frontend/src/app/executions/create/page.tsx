@@ -1,110 +1,114 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { MainLayout } from '@/components/layout/main-layout'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { MainLayout } from "@/components/layout/main-layout";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
-import { useDatasets } from '@/lib/hooks/useDatasets'
-import { useRules } from '@/lib/hooks/useRules'
-import { useCreateExecution } from '@/lib/hooks/useExecutions'
-import {
-  Play,
-  ArrowLeft,
-  Database,
-  Shield,
-  CheckCircle,
-  AlertTriangle
-} from 'lucide-react'
-import Link from 'next/link'
-import { Dataset, Rule, RuleKind, Criticality } from '@/types/api'
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { useDatasets } from "@/lib/hooks/useDatasets";
+import { useRules } from "@/lib/hooks/useRules";
+import { useCreateExecution } from "@/lib/hooks/useExecutions";
+import { Play, ArrowLeft, Database, Shield, CheckCircle } from "lucide-react";
+import Link from "next/link";
+import { Criticality, RuleKind, Dataset } from "@/types/api";
 
 const criticalityColors: Record<Criticality, string> = {
-  low: 'bg-blue-100 text-blue-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-orange-100 text-orange-800',
-  critical: 'bg-red-100 text-red-800'
-}
+  low: "bg-blue-100 text-blue-800",
+  medium: "bg-yellow-100 text-yellow-800",
+  high: "bg-orange-100 text-orange-800",
+  critical: "bg-red-100 text-red-800",
+};
 
 const ruleKindLabels: Record<RuleKind, string> = {
-  missing_data: 'Missing Data',
-  standardization: 'Standardization',
-  value_list: 'Value List',
-  length_range: 'Length Range',
-  cross_field: 'Cross Field',
-  char_restriction: 'Character Restriction',
-  regex: 'Regex Pattern',
-  custom: 'Custom Rule'
-}
+  missing_data: "Missing Data",
+  standardization: "Standardization",
+  value_list: "Value List",
+  length_range: "Length Range",
+  cross_field: "Cross Field",
+  char_restriction: "Character Restriction",
+  regex: "Regex Pattern",
+  custom: "Custom Rule",
+};
 
 export default function CreateExecutionPage() {
-  const router = useRouter()
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
-  const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([])
+  const router = useRouter();
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>("");
+  const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
 
-  const { data: datasetsData, isLoading: datasetsLoading } = useDatasets()
-  const { data: rulesData, isLoading: rulesLoading } = useRules()
-  const createExecution = useCreateExecution()
+  const { data: datasetsData, isLoading: datasetsLoading } = useDatasets();
+  const { data: rulesData, isLoading: rulesLoading } = useRules();
+  const createExecution = useCreateExecution();
 
-  const datasets = datasetsData?.items || []
-  const activeRules = rulesData?.items?.filter(rule => rule.is_active) || []
+  const datasets = datasetsData?.items || [];
+  const activeRules = rulesData?.items?.filter((rule) => rule.is_active) || [];
 
-  const selectedDataset = datasets.find(d => d.id === selectedDatasetId)
+  const selectedDataset = datasets.find(
+    (d: Dataset) => d.id === selectedDatasetId
+  );
 
   const handleRuleToggle = (ruleId: string, checked: boolean) => {
     if (checked) {
-      setSelectedRuleIds(prev => [...prev, ruleId])
+      setSelectedRuleIds((prev) => [...prev, ruleId]);
     } else {
-      setSelectedRuleIds(prev => prev.filter(id => id !== ruleId))
+      setSelectedRuleIds((prev) => prev.filter((id) => id !== ruleId));
     }
-  }
+  };
 
   const handleSelectAllRules = (checked: boolean) => {
     if (checked) {
-      setSelectedRuleIds(activeRules.map(rule => rule.id))
+      setSelectedRuleIds(activeRules.map((rule) => rule.id));
     } else {
-      setSelectedRuleIds([])
+      setSelectedRuleIds([]);
     }
-  }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!selectedDatasetId) {
-      alert('Please select a dataset')
-      return
+      alert("Please select a dataset");
+      return;
     }
 
     if (selectedRuleIds.length === 0) {
-      alert('Please select at least one rule to execute')
-      return
+      alert("Please select at least one rule to execute");
+      return;
     }
 
     try {
       // For now, we'll use the dataset_id as dataset_version_id since the backend may not have proper versioning
       const execution = await createExecution.mutateAsync({
         dataset_version_id: selectedDatasetId, // This should ideally be a dataset version ID
-        rule_ids: selectedRuleIds
-      })
+        rule_ids: selectedRuleIds,
+      });
 
-      router.push(`/executions/${execution.id}`)
+      router.push(`/executions/${execution.id}`);
     } catch (error) {
-      console.error('Failed to create execution:', error)
-      alert('Failed to start execution. Please try again.')
+      console.error("Failed to create execution:", error);
+      alert("Failed to start execution. Please try again.");
     }
-  }
+  };
 
-  const canSubmit = selectedDatasetId && selectedRuleIds.length > 0 && !createExecution.isPending
+  const canSubmit =
+    selectedDatasetId &&
+    selectedRuleIds.length > 0 &&
+    !createExecution.isPending;
 
   return (
     <MainLayout>
@@ -145,30 +149,37 @@ export default function CreateExecutionPage() {
               ) : datasets.length === 0 ? (
                 <div className="text-center py-8">
                   <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No Datasets Available</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    No Datasets Available
+                  </h3>
                   <p className="text-muted-foreground mb-4">
                     You need to upload a dataset before running quality rules.
                   </p>
                   <Button asChild>
-                    <Link href="/data">
-                      Upload Dataset
-                    </Link>
+                    <Link href="/data">Upload Dataset</Link>
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
+                  <Select
+                    value={selectedDatasetId}
+                    onValueChange={setSelectedDatasetId}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a dataset..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {datasets.map((dataset) => (
+                      {datasets.map((dataset: Dataset) => (
                         <SelectItem key={dataset.id} value={dataset.id}>
                           <div className="flex items-center justify-between w-full">
                             <span>{dataset.name}</span>
                             <div className="flex items-center gap-2 ml-4">
-                              <Badge variant="outline">{dataset.source_type}</Badge>
-                              <Badge variant="secondary">{dataset.status}</Badge>
+                              <Badge variant="outline">
+                                {dataset.source_type}
+                              </Badge>
+                              <Badge variant="secondary">
+                                {dataset.status}
+                              </Badge>
                             </div>
                           </div>
                         </SelectItem>
@@ -180,19 +191,28 @@ export default function CreateExecutionPage() {
                     <Card className="bg-muted/50">
                       <CardContent className="pt-6">
                         <div className="space-y-2">
-                          <h4 className="font-medium">{selectedDataset.name}</h4>
+                          <h4 className="font-medium">
+                            {selectedDataset.name}
+                          </h4>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span>Source: {selectedDataset.source_type}</span>
                             <span>Status: {selectedDataset.status}</span>
                             {selectedDataset.row_count && (
-                              <span>Rows: {selectedDataset.row_count.toLocaleString()}</span>
+                              <span>
+                                Rows:{" "}
+                                {selectedDataset.row_count.toLocaleString()}
+                              </span>
                             )}
                             {selectedDataset.column_count && (
-                              <span>Columns: {selectedDataset.column_count}</span>
+                              <span>
+                                Columns: {selectedDataset.column_count}
+                              </span>
                             )}
                           </div>
                           {selectedDataset.notes && (
-                            <p className="text-sm text-muted-foreground">{selectedDataset.notes}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {selectedDataset.notes}
+                            </p>
                           )}
                         </div>
                       </CardContent>
@@ -222,12 +242,11 @@ export default function CreateExecutionPage() {
                   <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">No Active Rules</h3>
                   <p className="text-muted-foreground mb-4">
-                    You need to create and activate quality rules before running executions.
+                    You need to create and activate quality rules before running
+                    executions.
                   </p>
                   <Button asChild>
-                    <Link href="/rules/create">
-                      Create Rule
-                    </Link>
+                    <Link href="/rules/create">Create Rule</Link>
                   </Button>
                 </div>
               ) : (
@@ -244,28 +263,41 @@ export default function CreateExecutionPage() {
                       </Label>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {selectedRuleIds.length} of {activeRules.length} rules selected
+                      {selectedRuleIds.length} of {activeRules.length} rules
+                      selected
                     </div>
                   </div>
 
                   <div className="grid gap-3">
                     {activeRules.map((rule) => (
-                      <Card key={rule.id} className="border-2 transition-colors hover:border-muted-foreground/20">
+                      <Card
+                        key={rule.id}
+                        className="border-2 transition-colors hover:border-muted-foreground/20"
+                      >
                         <CardContent className="pt-4">
                           <div className="flex items-start justify-between">
                             <div className="flex items-start space-x-3 flex-1">
                               <Checkbox
                                 id={rule.id}
                                 checked={selectedRuleIds.includes(rule.id)}
-                                onCheckedChange={(checked) => handleRuleToggle(rule.id, !!checked)}
+                                onCheckedChange={(checked) =>
+                                  handleRuleToggle(rule.id, !!checked)
+                                }
                                 className="mt-1"
                               />
                               <div className="flex-1 space-y-2">
                                 <div className="flex items-center gap-2">
-                                  <Label htmlFor={rule.id} className="font-medium cursor-pointer">
+                                  <Label
+                                    htmlFor={rule.id}
+                                    className="font-medium cursor-pointer"
+                                  >
                                     {rule.name}
                                   </Label>
-                                  <Badge className={criticalityColors[rule.criticality]}>
+                                  <Badge
+                                    className={
+                                      criticalityColors[rule.criticality]
+                                    }
+                                  >
                                     {rule.criticality}
                                   </Badge>
                                 </div>
@@ -279,7 +311,10 @@ export default function CreateExecutionPage() {
                                     {ruleKindLabels[rule.kind]}
                                   </Badge>
                                   {rule.is_active && (
-                                    <Badge variant="default" className="bg-green-100 text-green-800">
+                                    <Badge
+                                      variant="default"
+                                      className="bg-green-100 text-green-800"
+                                    >
                                       <CheckCircle className="h-3 w-3 mr-1" />
                                       Active
                                     </Badge>
@@ -310,12 +345,15 @@ export default function CreateExecutionPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <h4 className="font-medium mb-2">Dataset</h4>
-                    <p className="text-sm text-muted-foreground">{selectedDataset?.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedDataset?.name}
+                    </p>
                   </div>
                   <div>
                     <h4 className="font-medium mb-2">Rules Selected</h4>
                     <p className="text-sm text-muted-foreground">
-                      {selectedRuleIds.length} rule{selectedRuleIds.length !== 1 ? 's' : ''} will be executed
+                      {selectedRuleIds.length} rule
+                      {selectedRuleIds.length !== 1 ? "s" : ""} will be executed
                     </p>
                   </div>
                 </div>
@@ -348,5 +386,5 @@ export default function CreateExecutionPage() {
         </form>
       </div>
     </MainLayout>
-  )
+  );
 }

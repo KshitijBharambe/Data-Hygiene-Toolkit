@@ -83,7 +83,7 @@ export default function DatasetsPage() {
       setError('')
       const response = await apiClient.getDatasets()
       setDatasets(response.items || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load datasets:', error)
       setError('Failed to load datasets. Please try again.')
     } finally {
@@ -100,7 +100,7 @@ export default function DatasetsPage() {
       setDatasets(datasets.filter(d => d.id !== datasetToDelete.id))
       setDeleteDialogOpen(false)
       setDatasetToDelete(null)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete dataset:', error)
       setError('Failed to delete dataset. Please try again.')
     } finally {
@@ -318,7 +318,7 @@ export default function DatasetsPage() {
             <DialogHeader>
               <DialogTitle>Delete Dataset</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete "{datasetToDelete?.name}"?
+                Are you sure you want to delete &quot;{datasetToDelete?.name}&quot;?
                 This action cannot be undone and will remove all associated data and quality checks.
               </DialogDescription>
             </DialogHeader>

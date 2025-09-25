@@ -27,8 +27,8 @@ export function useDashboardOverview() {
       }
     },
     enabled: isAuthenticated && hasToken,
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 15000, // Consider data stale after 15 seconds
+    refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
+    staleTime: 5000, // Consider data stale after 5 seconds
     retry: (failureCount, error) => {
       console.log('Query retry attempt:', { failureCount, error })
       return failureCount < 3

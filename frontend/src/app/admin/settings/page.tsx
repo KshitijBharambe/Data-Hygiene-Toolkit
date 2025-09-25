@@ -4,10 +4,8 @@ import { useState } from 'react'
 import { MainLayout } from '@/components/layout/main-layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -22,9 +20,6 @@ import {
   Database,
   Shield,
   Bell,
-  Mail,
-  Server,
-  Key,
   Save,
   RefreshCw,
   AlertTriangle,
@@ -147,8 +142,8 @@ const systemSettings: SystemSetting[] = [
 
 interface SettingCardProps {
   setting: SystemSetting
-  value: any
-  onChange: (key: string, value: any) => void
+  value: string | boolean | number
+  onChange: (key: string, value: string | boolean | number) => void
 }
 
 function SettingCard({ setting, value, onChange }: SettingCardProps) {
@@ -157,7 +152,7 @@ function SettingCard({ setting, value, onChange }: SettingCardProps) {
       case 'boolean':
         return (
           <Switch
-            checked={value}
+            checked={typeof value === 'boolean' ? value : false}
             onCheckedChange={(checked) => onChange(setting.key, checked)}
           />
         )
@@ -180,7 +175,7 @@ function SettingCard({ setting, value, onChange }: SettingCardProps) {
         return (
           <Input
             type="number"
-            value={value}
+            value={typeof value === 'number' ? value : 0}
             onChange={(e) => onChange(setting.key, parseInt(e.target.value) || 0)}
             className="w-48"
           />
@@ -189,7 +184,7 @@ function SettingCard({ setting, value, onChange }: SettingCardProps) {
         return (
           <Input
             type="text"
-            value={value}
+            value={typeof value === 'string' ? value : ''}
             onChange={(e) => onChange(setting.key, e.target.value)}
             className="w-96"
           />
@@ -219,13 +214,13 @@ function SettingCard({ setting, value, onChange }: SettingCardProps) {
 }
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<Record<string, any>>(
+  const [settings, setSettings] = useState<Record<string, string | boolean | number>>(
     Object.fromEntries(systemSettings.map(s => [s.key, s.value]))
   )
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  const handleSettingChange = (key: string, value: any) => {
+  const handleSettingChange = (key: string, value: string | boolean | number) => {
     setSettings(prev => ({ ...prev, [key]: value }))
     setHasChanges(true)
   }
@@ -293,7 +288,7 @@ export default function AdminSettingsPage() {
               <div className="flex items-center gap-2 text-orange-800">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="text-sm font-medium">
-                  You have unsaved changes. Click "Save Changes" to apply them.
+                  You have unsaved changes. Click &quot;Save Changes&quot; to apply them.
                 </span>
               </div>
             </CardContent>

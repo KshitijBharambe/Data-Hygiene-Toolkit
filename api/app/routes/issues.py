@@ -29,7 +29,7 @@ async def get_issues(
     try:
         query = db.query(Issue).options(
             joinedload(Issue.rule),
-            joinedload(Issue.execution),
+            joinedload(Issue.execution).joinedload(Execution.dataset_version).joinedload(DatasetVersion.dataset),
             joinedload(Issue.fixes)
         )
 

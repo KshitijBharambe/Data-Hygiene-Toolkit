@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useSession } from 'next-auth/react'
 import { useDashboardOverview } from '@/lib/hooks/useDashboard'
+import { DashboardOverview } from '@/types/api'
 
 interface SidebarProps {
   isOpen: boolean
@@ -36,13 +37,13 @@ interface SidebarProps {
 interface NavItem {
   title: string
   href?: string
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   badge?: string | number
   children?: NavItem[]
   roles?: string[]
 }
 
-function getNavigationItems(dashboardData: any): NavItem[] {
+function getNavigationItems(dashboardData: DashboardOverview | undefined): NavItem[] {
   return [
     {
       title: 'Dashboard',

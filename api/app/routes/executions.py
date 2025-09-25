@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import json
+import uuid
+from datetime import datetime, timezone
 
 from app.database import get_session
 from app.models import (
@@ -95,32 +97,37 @@ async def create_execution(
     """
     Execute rules on a dataset version
     """
+    print(f"Creating execution with data: {execution_data}")
+    print(f"User: {current_user.email if current_user else 'None'}")
+
     # Force reload
     # Get dataset version - try as version ID first, then as dataset ID
     dataset_version = db.query(DatasetVersion).filter(
         DatasetVersion.id == execution_data.dataset_version_id
     ).first()
 
+    print(f"Dataset version lookup result: {dataset_version}")
+
     if not dataset_version:
+        print(f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}")
         # If not found as version ID, try to find the latest version of the dataset
         dataset = db.query(Dataset).filter(Dataset.id == execution_data.dataset_version_id).first()
+        print(f"Dataset lookup result: {dataset}")
         if dataset:
             # Get the latest version for this dataset
             dataset_version = db.query(DatasetVersion).filter(
                 DatasetVersion.dataset_id == dataset.id
             ).order_by(DatasetVersion.created_at.desc()).first()
+            print(f"Latest dataset version for dataset {dataset.id}: {dataset_version}")
 
             # If no versions exist, create one
             if not dataset_version:
-                import uuid
-                from datetime import datetime
-
                 dataset_version = DatasetVersion(
                     id=str(uuid.uuid4()),
                     dataset_id=dataset.id,
                     version_no=1,
-                    created_by="system",  # or current_user.id
-                    created_at=datetime.utcnow()
+                    created_by=current_user.id,
+                    created_at=datetime.now(timezone.utc)
                 )
                 db.add(dataset_version)
                 db.commit()
@@ -147,10 +154,39 @@ async def create_execution(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error executing rules: {str(e)}"
-        )
+        import traceback
+
+        # Rollback any pending database changes
+        try:
+            db.rollback()
+        except Exception as rollback_error:
+            print(f"Database rollback error: {str(rollback_error)}")
+
+        error_details = {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc(),
+            "dataset_version_id": execution_data.dataset_version_id if execution_data else None,
+            "rule_ids": execution_data.rule_ids if execution_data else None
+        }
+        print(f"Execution creation error: {json.dumps(error_details, indent=2)}")
+
+        # Provide more specific error messages
+        if "FileNotFoundError" in str(type(e)):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dataset file not found. Please ensure the dataset has been uploaded correctly."
+            )
+        elif "ImportError" in str(type(e)):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal service error. Please contact system administrator."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error executing rules: {str(e)}"
+            )
 
 
 @router.get("/{execution_id}/issues", response_model=List[IssueResponse])

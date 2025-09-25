@@ -21,7 +21,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import {
   DropdownMenu,
@@ -59,7 +58,6 @@ import {
   UserPlus,
   Search,
   MoreHorizontal,
-  Edit,
   Trash2,
   Shield,
   Eye,

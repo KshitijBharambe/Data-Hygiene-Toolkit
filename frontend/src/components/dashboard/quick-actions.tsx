@@ -8,16 +8,14 @@ import {
   Plus,
   FileText,
   Download,
-  Settings,
   Database,
-  Shield
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface QuickAction {
   title: string
   description: string
-  icon: any
+  icon: React.ComponentType<{ className?: string }>
   href: string
   variant?: 'default' | 'secondary' | 'outline'
 }

@@ -10,7 +10,7 @@ export function useRules(page: number = 1, size: number = 20) {
 
   return useQuery<PaginatedResponse<Rule>>({
     queryKey: ['rules', page, size],
-    queryFn: () => apiClient.getRules(page, size),
+    queryFn: () => apiClient.getRules(),
     enabled: isAuthenticated && hasToken,
     staleTime: 30000, // Consider data stale after 30 seconds
   })

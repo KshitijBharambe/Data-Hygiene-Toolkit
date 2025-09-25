@@ -603,8 +603,8 @@ async def get_system_health(
             },
             "activity_health": recent_activity,
             "performance_metrics": {
-                "avg_execution_time": self._get_avg_execution_time(db),
-                "success_rate": self._get_success_rate(db)
+                "avg_execution_time": _get_avg_execution_time(db),
+                "success_rate": _get_success_rate(db)
             }
         }
 
@@ -621,16 +621,20 @@ def _get_avg_execution_time(db: Session) -> float:
     recent_threshold = datetime.now() - timedelta(days=7)
     recent_executions = (
         db.query(Execution)
-        .filter(Execution.created_at >= recent_threshold)
-        .filter(Execution.duration_seconds.isnot(None))
+        .filter(Execution.started_at >= recent_threshold)
+        .filter(Execution.finished_at.isnot(None))
         .all()
     )
 
     if not recent_executions:
         return 0.0
 
-    total_time = sum(e.duration_seconds for e in recent_executions)
-    return round(total_time / len(recent_executions), 2)
+    total_time = sum(
+        (e.finished_at - e.started_at).total_seconds()
+        for e in recent_executions
+        if e.finished_at and e.started_at
+    )
+    return round(total_time / len(recent_executions), 2) if recent_executions else 0.0
 
 def _get_success_rate(db: Session) -> float:
     """Get success rate from recent executions"""
@@ -639,7 +643,7 @@ def _get_success_rate(db: Session) -> float:
     recent_threshold = datetime.now() - timedelta(days=7)
     recent_executions = (
         db.query(Execution)
-        .filter(Execution.created_at >= recent_threshold)
+        .filter(Execution.started_at >= recent_threshold)
         .all()
     )
 

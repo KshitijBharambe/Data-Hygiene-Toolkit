@@ -3,12 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '@/lib/api'
 import {
-  Dataset,
-  DatasetCreate,
-  DatasetVersion,
-  DatasetColumn,
-  DataProfileResponse,
-  PaginatedResponse
+  DatasetCreate
 } from '@/types/api'
 
 // Query keys
@@ -24,7 +19,7 @@ const QUERY_KEYS = {
 export function useDatasets(page: number = 1, size: number = 20) {
   return useQuery({
     queryKey: [...QUERY_KEYS.datasets, page, size],
-    queryFn: () => apiClient.getDatasets(page, size),
+    queryFn: () => apiClient.getDatasets(),
   })
 }
 
