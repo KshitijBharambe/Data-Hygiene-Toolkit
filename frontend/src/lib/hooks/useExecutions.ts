@@ -63,10 +63,12 @@ export function useCancelExecution() {
   return useMutation({
     mutationFn: async (id: string) => {
       // The backend DELETE endpoint cancels executions
+      const baseURL = process.env.NODE_ENV === 'production'
+        ? process.env.NEXT_PUBLIC_API_URL_PROD || "https://api.kshitij.space"
+        : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
       const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-        }/executions/${id}`,
+        `${baseURL}/executions/${id}`,
         {
           method: "DELETE",
           headers: {
