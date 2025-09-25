@@ -114,11 +114,24 @@ export function useIssues(filters?: {
         params.limit = filters?.limit || 50;
         params.offset = filters?.offset || 0;
 
+        console.log("Making request to /issues/ with params:", params);
+        console.log("API base URL:", apiClient.getToken() ? "Has token" : "No token");
+
         const response = await apiClient.get<Issue[]>("/issues/", { params });
         console.log("Issues data success:", response.data);
         return response.data || [];
       } catch (error: unknown) {
-        console.error("Issues data error:", error);
+        console.error("Issues data error details:", {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
+
+        // Check if it's a network error specifically
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_NETWORK') {
+          console.error('Network error - API may not be accessible');
+        }
+
         throw error;
       }
     },
