@@ -76,8 +76,8 @@ export default NextAuth({
     }),
   ],
   pages: {
-    signIn: "/auth/login",
-    signOut: "/auth/logout",
+    signIn: "/auth/login/",
+    signOut: "/auth/logout/",
   },
   callbacks: {
     async jwt({ token, user }: { token: JWT; user?: User & { accessToken?: string; role?: string } }) {

@@ -114,7 +114,7 @@ export function useIssues(filters?: {
         params.limit = filters?.limit || 50;
         params.offset = filters?.offset || 0;
 
-        const response = await apiClient.get<Issue[]>("/issues", { params });
+        const response = await apiClient.get<Issue[]>("/issues/", { params });
         console.log("Issues data success:", response.data);
         return response.data || [];
       } catch (error: unknown) {
@@ -147,7 +147,7 @@ export function useIssuesSummary(days: number = 30) {
 
       try {
         const response = await apiClient.get<IssuesSummary>(
-          `/issues/statistics/summary?days=${days}`
+          `/issues/statistics/summary/?days=${days}`
         );
         console.log("Issues summary success:", response.data);
         return response.data;
@@ -180,7 +180,7 @@ export function useIssue(issueId: string) {
       });
 
       try {
-        const response = await apiClient.get<DetailedIssue>(`/issues/${issueId}`);
+        const response = await apiClient.get<DetailedIssue>(`/issues/${issueId}/`);
         console.log("Detailed issue success:", response.data);
         return response.data;
       } catch (error) {
@@ -205,7 +205,7 @@ export async function createFix(
   }
 ) {
   try {
-    const response = await apiClient.post(`/issues/${issueId}/fix`, fixData);
+    const response = await apiClient.post(`/issues/${issueId}/fix/`, fixData);
     return response.data;
   } catch (err) {
     console.error("Failed to create fix:", err);
@@ -215,7 +215,7 @@ export async function createFix(
 
 export async function resolveIssue(issueId: string) {
   try {
-    const response = await apiClient.patch(`/issues/${issueId}/resolve`);
+    const response = await apiClient.patch(`/issues/${issueId}/resolve/`);
     return response.data;
   } catch (err) {
     console.error("Failed to resolve issue:", err);
@@ -225,7 +225,7 @@ export async function resolveIssue(issueId: string) {
 
 export async function unresolveIssue(issueId: string) {
   try {
-    const response = await apiClient.patch(`/issues/${issueId}/unresolve`);
+    const response = await apiClient.patch(`/issues/${issueId}/unresolve/`);
     return response.data;
   } catch (err) {
     console.error("Failed to unresolve issue:", err);

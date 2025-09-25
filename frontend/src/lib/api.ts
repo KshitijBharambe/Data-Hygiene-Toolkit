@@ -98,7 +98,7 @@ class ApiClient {
   // Auth endpoints
   async login(credentials: UserLogin): Promise<TokenResponse> {
     const response = await this.client.post<TokenResponse>(
-      "/auth/login",
+      "/auth/login/",
       credentials
     );
     this.setToken(response.data.access_token);
@@ -106,7 +106,7 @@ class ApiClient {
   }
 
   async register(userData: UserCreate): Promise<User> {
-    const response = await this.client.post<User>("/auth/register", userData);
+    const response = await this.client.post<User>("/auth/register/", userData);
     return response.data;
   }
 
@@ -115,13 +115,13 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<User> {
-    const response = await this.client.get<User>("/auth/me");
+    const response = await this.client.get<User>("/auth/me/");
     return response.data;
   }
 
   // Dataset endpoints
   async getDatasets(): Promise<PaginatedResponse<Dataset>> {
-    const response = await this.client.get<Dataset[]>("/data/datasets");
+    const response = await this.client.get<Dataset[]>("/data/datasets/");
     // Convert the array response to paginated format for consistency
     const datasets = Array.isArray(response.data) ? response.data : [];
     return {
@@ -134,12 +134,12 @@ class ApiClient {
   }
 
   async getDataset(id: string): Promise<Dataset> {
-    const response = await this.client.get<Dataset>(`/data/datasets/${id}`);
+    const response = await this.client.get<Dataset>(`/data/datasets/${id}/`);
     return response.data;
   }
 
   async createDataset(dataset: DatasetCreate): Promise<Dataset> {
-    const response = await this.client.post<Dataset>("/data/datasets", dataset);
+    const response = await this.client.post<Dataset>("/data/datasets/", dataset);
     return response.data;
   }
 
@@ -155,7 +155,7 @@ class ApiClient {
   }
 
   async deleteDataset(id: string): Promise<void> {
-    await this.client.delete(`/data/datasets/${id}`);
+    await this.client.delete(`/data/datasets/${id}/`);
   }
 
   async uploadFile(
@@ -180,7 +180,7 @@ class ApiClient {
       filename: string;
       size: number;
       dataset_id: string;
-    }>("/data/upload/file", formData, {
+    }>("/data/upload/file/", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
@@ -296,7 +296,7 @@ class ApiClient {
   }
 
   async getExecution(id: string): Promise<Execution> {
-    const response = await this.client.get<Execution>(`/executions/${id}`);
+    const response = await this.client.get<Execution>(`/executions/${id}/`);
     return response.data;
   }
 
@@ -325,30 +325,30 @@ class ApiClient {
     if (executionId) params.execution_id = executionId;
 
     const response = await this.client.get<PaginatedResponse<Issue>>(
-      "/issues",
+      "/issues/",
       { params }
     );
     return response.data;
   }
 
   async getIssue(id: string): Promise<Issue> {
-    const response = await this.client.get<Issue>(`/issues/${id}`);
+    const response = await this.client.get<Issue>(`/issues/${id}/`);
     return response.data;
   }
 
   async resolveIssue(id: string): Promise<Issue> {
-    const response = await this.client.post<Issue>(`/issues/${id}/resolve`);
+    const response = await this.client.post<Issue>(`/issues/${id}/resolve/`);
     return response.data;
   }
 
   // Fix endpoints
   async createFix(fix: FixCreate): Promise<Fix> {
-    const response = await this.client.post<Fix>("/fixes", fix);
+    const response = await this.client.post<Fix>("/fixes/", fix);
     return response.data;
   }
 
   async getFixes(issueId: string): Promise<Fix[]> {
-    const response = await this.client.get<Fix[]>(`/issues/${issueId}/fixes`);
+    const response = await this.client.get<Fix[]>(`/issues/${issueId}/fixes/`);
     return response.data;
   }
 
@@ -367,12 +367,12 @@ class ApiClient {
   }
 
   async createExport(exportData: ExportCreate): Promise<Export> {
-    const response = await this.client.post<Export>("/exports", exportData);
+    const response = await this.client.post<Export>("/exports/", exportData);
     return response.data;
   }
 
   async downloadExport(id: string): Promise<Blob> {
-    const response = await this.client.get(`/exports/${id}/download`, {
+    const response = await this.client.get(`/exports/${id}/download/`, {
       responseType: "blob",
     });
     return response.data;
@@ -409,7 +409,7 @@ class ApiClient {
 
   // User management endpoints (admin only)
   async getUsers(): Promise<User[]> {
-    const response = await this.client.get<User[]>("/auth/users");
+    const response = await this.client.get<User[]>("/auth/users/");
     return response.data;
   }
 
@@ -425,11 +425,11 @@ class ApiClient {
   }
 
   async deleteUser(userId: string): Promise<void> {
-    await this.client.delete(`/auth/users/${userId}`);
+    await this.client.delete(`/auth/users/${userId}/`);
   }
 
   async createUser(userData: UserCreate): Promise<User> {
-    const response = await this.client.post<User>("/auth/register", userData);
+    const response = await this.client.post<User>("/auth/register/", userData);
     return response.data;
   }
 
