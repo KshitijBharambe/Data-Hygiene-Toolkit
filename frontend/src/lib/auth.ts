@@ -66,9 +66,17 @@ export default NextAuth({
           if (error && typeof error === "object" && "response" in error) {
             const axiosError = error as {
               response?: { status?: number; data?: unknown };
+              message?: string;
             };
             console.error("API response status:", axiosError.response?.status);
             console.error("API response data:", axiosError.response?.data);
+
+            // Handle specific error cases
+            if (axiosError.response?.status === 502) {
+              console.error("502 Bad Gateway: Backend API server is unreachable");
+            }
+          } else if (error && typeof error === "object" && "message" in error) {
+            console.error("Network error:", (error as Error).message);
           }
           return null;
         }
@@ -76,8 +84,9 @@ export default NextAuth({
     }),
   ],
   pages: {
-    signIn: "/auth/login/",
-    signOut: "/auth/logout/",
+    signIn: "/auth/signin",
+    signOut: "/auth/signout",
+    error: "/auth/error",
   },
   callbacks: {
     async jwt({ token, user }: { token: JWT; user?: User & { accessToken?: string; role?: string } }) {

@@ -98,7 +98,7 @@ class ApiClient {
   // Auth endpoints
   async login(credentials: UserLogin): Promise<TokenResponse> {
     const response = await this.client.post<TokenResponse>(
-      "/auth/login/",
+      "/auth/login",
       credentials
     );
     this.setToken(response.data.access_token);
