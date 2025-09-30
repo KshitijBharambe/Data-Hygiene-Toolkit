@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
 import { Execution, ExecutionCreate, PaginatedResponse } from "@/types/api";
+import { getApiUrl } from "@/lib/config";
 
 // Query keys
 const QUERY_KEYS = {
@@ -63,9 +64,7 @@ export function useCancelExecution() {
   return useMutation({
     mutationFn: async (id: string) => {
       // The backend DELETE endpoint cancels executions
-      const baseURL = process.env.NODE_ENV === 'production'
-        ? process.env.NEXT_PUBLIC_API_URL_PROD || "https://api.kshitij.space"
-        : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const baseURL = getApiUrl();
 
       const response = await fetch(
         `${baseURL}/executions/${id}`,

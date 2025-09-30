@@ -23,9 +23,10 @@ export const config = {
     // - _next/static (static files)
     // - _next/image (image optimization files)
     // - favicon.ico (favicon file)
+    // - manifest.json (PWA manifest)
     // - auth (auth pages)
     // - test (test page)
     // - root path (landing page)
-    '/((?!api|_next/static|_next/image|favicon|auth|test|$).*)',
+    '/((?!api|_next/static|_next/image|favicon|manifest.json|auth|test|$).*)',
   ],
 }

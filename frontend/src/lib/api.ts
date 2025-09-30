@@ -26,16 +26,13 @@ import {
   Fix,
   FixCreate,
 } from "@/types/api";
+import { getApiUrl } from "./config";
 
 class ApiClient {
   private client: AxiosInstance;
   private token: string | null = null;
 
-  constructor(
-    baseURL: string = process.env.NODE_ENV === 'production'
-      ? process.env.NEXT_PUBLIC_API_URL_PROD || "https://api.kshitij.space"
-      : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-  ) {
+  constructor(baseURL: string = getApiUrl()) {
     this.client = axios.create({
       baseURL,
       headers: {

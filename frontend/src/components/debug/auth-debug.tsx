@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import apiClient from '@/lib/api'
+import { getApiUrl } from '@/lib/config'
 
 export function AuthDebug() {
   const { data: session, status } = useSession()
@@ -24,7 +25,7 @@ export function AuthDebug() {
         <div><strong>User Role:</strong> {session?.user?.role || 'N/A'}</div>
         <div><strong>Has Access Token:</strong> {session?.accessToken ? 'Yes' : 'No'}</div>
         <div><strong>Token in API Client:</strong> {apiClient.getToken() ? 'Present' : 'Missing'}</div>
-        <div><strong>API Base URL:</strong> {process.env.NEXT_PUBLIC_API_URL}</div>
+        <div><strong>API Base URL:</strong> {getApiUrl()}</div>
       </CardContent>
     </Card>
   )
