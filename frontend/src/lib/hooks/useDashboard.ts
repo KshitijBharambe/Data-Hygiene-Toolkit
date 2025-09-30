@@ -11,18 +11,10 @@ export function useDashboardOverview() {
   return useQuery<DashboardOverview>({
     queryKey: ['dashboard-overview'],
     queryFn: async () => {
-      console.log('Fetching dashboard data...', {
-        isAuthenticated,
-        hasToken,
-        currentToken: apiClient.getToken() ? 'present' : 'missing'
-      })
-
       try {
         const result = await apiClient.getDashboardOverview()
-        console.log('Dashboard data success:', result)
         return result
       } catch (error) {
-        console.error('Dashboard data error:', error)
         throw error
       }
     },
@@ -30,7 +22,6 @@ export function useDashboardOverview() {
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
     retry: (failureCount, error) => {
-      console.log('Query retry attempt:', { failureCount, error })
       return failureCount < 3
     }
   })

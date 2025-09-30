@@ -52,14 +52,6 @@ function getTrendColor(
 export function StatsCards() {
   const { data: dashboardData, isLoading, error } = useDashboardOverview();
 
-  // Add debugging
-  console.log("StatsCards render:", {
-    hasData: !!dashboardData,
-    isLoading,
-    hasError: !!error,
-    error: error?.message,
-  });
-
   if (isLoading) {
     return (
       <MagicBentoWrapper
@@ -92,7 +84,6 @@ export function StatsCards() {
   }
 
   if (error) {
-    console.error("Dashboard data error:", error);
     return (
       <MagicBentoWrapper
         textAutoHide={true}
