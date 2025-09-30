@@ -14,11 +14,8 @@ export default function LandingPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    console.log("Setting mounted to true");
     setMounted(true);
   }, []);
-
-  console.log("LandingPage render, mounted:", mounted);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
