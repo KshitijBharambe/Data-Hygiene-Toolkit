@@ -131,19 +131,20 @@ async def setup_demo_account(
     db: Session = Depends(get_session)
 ):
     """
-    Create a demo admin account if no users exist.
-    This endpoint is only available when the database is empty.
+    Create a demo admin account if it doesn't exist.
+    This endpoint is idempotent.
     """
-    # Check if any users exist
-    user_count = db.query(User).count()
-    if user_count > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Demo account can only be created when database is empty"
-        )
+    demo_email = "admin@datahygiene.com"
+    
+    # Check if demo user already exists
+    existing_user = db.query(User).filter(User.email == demo_email).first()
+    if existing_user:
+        return {
+            "message": "Demo admin account already exists",
+            "user": UserResponse.model_validate(existing_user)
+        }
 
     # Create demo admin account
-    demo_email = "admin@datahygiene.com"
     demo_password = "demo123"
 
     hashed_password = get_password_hash(demo_password)
