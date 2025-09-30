@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/providers/auth-provider";
@@ -29,6 +29,9 @@ export const metadata: Metadata = {
     apple: { url: '/apple-touch-icon.svg', sizes: '180x180', type: 'image/svg+xml' },
   },
   manifest: '/manifest.json',
+};
+
+export const viewport: Viewport = {
   themeColor: '#7c3aed',
 };
 
