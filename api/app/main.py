@@ -14,7 +14,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://data-hygiene-toolkit.vercel.app",
+        "https://data-hygiene-toolkit-git-main-hzy3s-projects.vercel.app",
+        "https://dht.kshitij.space",
         "https://kshitij.space",
         "https://*.kshitij.space",
         "http://localhost:3000",
