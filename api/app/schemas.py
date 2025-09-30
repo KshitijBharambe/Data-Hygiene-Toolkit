@@ -34,6 +34,9 @@ class TokenResponse(BaseModel):
     token_type: str
     user: UserResponse
 
+class UserRoleUpdate(BaseModel):
+    role: UserRole
+
 # Dataset schemas
 class DatasetBase(BaseModel):
     name: str

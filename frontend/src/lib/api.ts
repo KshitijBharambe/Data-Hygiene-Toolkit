@@ -421,7 +421,7 @@ class ApiClient {
   ): Promise<{ message: string; user: User }> {
     const response = await this.client.put<{ message: string; user: User }>(
       `/auth/users/${userId}/role`,
-      role
+      { role }
     );
     return response.data;
   }

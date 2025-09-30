@@ -26,7 +26,9 @@ if is_running_in_docker():
     # In Docker - use environment variable directly
     docker_db_url = os.getenv("DATABASE_URL")
     if docker_db_url:
-        config.set_main_option("sqlalchemy.url", docker_db_url)
+        # Escape % characters for ConfigParser by doubling them
+        escaped_url = docker_db_url.replace('%', '%%')
+        config.set_main_option("sqlalchemy.url", escaped_url)
         print("🐳 Using DATABASE_URL from Docker environment:", docker_db_url)
     else:
         raise ValueError("DATABASE_URL not set in Docker environment")
@@ -37,7 +39,9 @@ else:
     local_db_url = os.getenv("DATABASE_URL")
     print("🧪 DATABASE_URL:", local_db_url)
     if local_db_url:
-        config.set_main_option("sqlalchemy.url", local_db_url)
+        # Escape % characters for ConfigParser by doubling them
+        escaped_url = local_db_url.replace('%', '%%')
+        config.set_main_option("sqlalchemy.url", escaped_url)
     else:
         raise ValueError("DATABASE_URL not found in .env.local")
 

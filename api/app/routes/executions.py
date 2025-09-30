@@ -169,7 +169,17 @@ async def create_execution(
             "dataset_version_id": execution_data.dataset_version_id if execution_data else None,
             "rule_ids": execution_data.rule_ids if execution_data else None
         }
-        print(f"Execution creation error: {json.dumps(error_details, indent=2)}")
+        print(f"=== EXECUTION CREATION ERROR ===")
+        print(f"Error: {error_details}")
+        print(f"Full traceback:")
+        print(traceback.format_exc())
+        print(f"=== END ERROR ===")
+
+        # Print to stderr as well
+        import sys
+        sys.stderr.write(f"EXECUTION ERROR: {str(e)}\n")
+        sys.stderr.write(traceback.format_exc())
+        sys.stderr.flush()
 
         # Provide more specific error messages
         if "FileNotFoundError" in str(type(e)):

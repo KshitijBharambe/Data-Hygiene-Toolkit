@@ -41,16 +41,23 @@ class RuleValidator(ABC):
 
 class MissingDataValidator(RuleValidator):
     """Validator for missing data detection"""
-    
+
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
         target_columns = self.params.get('columns', [])
-        
+
         if not target_columns:
+            print(f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
-            
+
+        # Validate columns exist in dataset
+        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        if missing_columns:
+            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+
         for column in target_columns:
             if column not in self.df.columns:
+                print(f"Skipping column '{column}' - not found in dataset")
                 continue
                 
             null_mask = self.df[column].isnull()
@@ -71,14 +78,24 @@ class MissingDataValidator(RuleValidator):
 
 class StandardizationValidator(RuleValidator):
     """Validator for data standardization (dates, phones, emails, etc.)"""
-    
+
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
         target_columns = self.params.get('columns', [])
         standardization_type = self.params.get('type', 'date')
-        
+
+        if not target_columns:
+            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            return issues
+
+        # Validate columns exist in dataset
+        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        if missing_columns:
+            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+
         for column in target_columns:
             if column not in self.df.columns:
+                print(f"Skipping column '{column}' - not found in dataset")
                 continue
                 
             if standardization_type == 'date':
@@ -168,18 +185,29 @@ class StandardizationValidator(RuleValidator):
 
 class ValueListValidator(RuleValidator):
     """Validator for allowed values list"""
-    
+
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
         target_columns = self.params.get('columns', [])
         allowed_values = self.params.get('allowed_values', [])
         case_sensitive = self.params.get('case_sensitive', True)
-        
-        if not allowed_values:
+
+        if not target_columns:
+            print(f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
-            
+
+        if not allowed_values:
+            print(f"Warning: Rule {self.rule.name} has no allowed values configured")
+            return issues
+
+        # Validate columns exist in dataset
+        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        if missing_columns:
+            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+
         for column in target_columns:
             if column not in self.df.columns:
+                print(f"Skipping column '{column}' - not found in dataset")
                 continue
                 
             for idx, value in self.df[column].items():
@@ -204,15 +232,25 @@ class ValueListValidator(RuleValidator):
 
 class LengthRangeValidator(RuleValidator):
     """Validator for field length constraints"""
-    
+
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
         target_columns = self.params.get('columns', [])
         min_length = self.params.get('min_length', 0)
         max_length = self.params.get('max_length', float('inf'))
-        
+
+        if not target_columns:
+            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            return issues
+
+        # Validate columns exist in dataset
+        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        if missing_columns:
+            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+
         for column in target_columns:
             if column not in self.df.columns:
+                print(f"Skipping column '{column}' - not found in dataset")
                 continue
                 
             for idx, value in self.df[column].items():
@@ -781,6 +819,29 @@ class RuleEngineService:
                         failed_rules += 1
                         continue
 
+                    # Parse rule parameters and validate
+                    try:
+                        params_str = getattr(rule, 'params', None)
+                        params = json.loads(params_str) if params_str else {}
+
+                        # Check if rule has required columns configured
+                        target_columns = params.get('columns', [])
+                        if not target_columns and rule_kind not in [RuleKind.custom]:
+                            execution_rule.note = "Rule has no target columns configured"
+                            failed_rules += 1
+                            continue
+
+                        # Check if columns exist in dataset
+                        missing_columns = [col for col in target_columns if col not in df.columns]
+                        if missing_columns:
+                            execution_rule.note = f"Warning: Columns not found in dataset: {', '.join(missing_columns)}"
+                            # Don't fail completely, just note it and continue
+
+                    except json.JSONDecodeError as e:
+                        execution_rule.note = f"Invalid rule parameters JSON: {str(e)}"
+                        failed_rules += 1
+                        continue
+
                     # Run validation
                     validator = validator_class(rule, df, self.db)
                     issues = validator.validate()
@@ -855,17 +916,28 @@ class RuleEngineService:
             })
 
             self.db.commit()
-            
+
+        except HTTPException as http_err:
+            # Re-raise HTTPException without wrapping (maintains original status code)
+            execution.status = ExecutionStatus.failed
+            execution.finished_at = datetime.now(timezone.utc)
+            execution.summary = json.dumps({'error': str(http_err.detail)})
+            self.db.commit()
+            raise
         except Exception as e:
+            # Handle unexpected errors
             execution.status = ExecutionStatus.failed
             execution.finished_at = datetime.now(timezone.utc)
             execution.summary = json.dumps({'error': str(e)})
             self.db.commit()
+            print(f"Unexpected error during rule execution: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Rule execution failed: {str(e)}"
             )
-        
+
         return execution
     
     def _load_dataset_as_dataframe(self, dataset_version) -> pd.DataFrame:
@@ -890,10 +962,13 @@ class RuleEngineService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to import data service: {str(e)}"
             )
+        except HTTPException:
+            # Re-raise HTTPExceptions from load_dataset_file (includes better error messages)
+            raise
         except FileNotFoundError as e:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Dataset file not found for version {dataset_version.id}: {str(e)}"
+                detail=f"Dataset file not found. The dataset may need to be re-uploaded. Dataset: {dataset_version.dataset_id}, Version: {dataset_version.version_no}"
             )
         except Exception as e:
             raise HTTPException(

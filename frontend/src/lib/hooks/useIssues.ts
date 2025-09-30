@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
 import { useAuthenticatedApi } from "./useAuthenticatedApi";
 
@@ -244,4 +244,50 @@ export async function unresolveIssue(issueId: string) {
     console.error("Failed to unresolve issue:", err);
     throw err;
   }
+}
+
+// Mutation hooks for better state management
+export function useCreateFixMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ issueId, fixData }: {
+      issueId: string;
+      fixData: { new_value?: string; comment?: string }
+    }) => createFix(issueId, fixData),
+    onSuccess: () => {
+      // Invalidate and refetch issues queries
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["issue"] });
+    },
+  });
+}
+
+export function useResolveIssueMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (issueId: string) => resolveIssue(issueId),
+    onSuccess: () => {
+      // Invalidate and refetch issues queries
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["issue"] });
+    },
+  });
+}
+
+export function useUnresolveIssueMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (issueId: string) => unresolveIssue(issueId),
+    onSuccess: () => {
+      // Invalidate and refetch issues queries
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["issue"] });
+    },
+  });
 }

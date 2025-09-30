@@ -1,0 +1,17 @@
+{
+  "name": "Data Hygiene Tool",
+  "short_name": "Data Hygiene",
+  "description": "Modern data quality management and cleansing platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

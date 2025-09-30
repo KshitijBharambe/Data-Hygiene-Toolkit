@@ -47,11 +47,13 @@ import {
   Issue,
   IssuesSummary,
   resolveIssue,
+  unresolveIssue,
   useIssue,
   useIssues,
   useIssuesSummary,
 } from "@/lib/hooks/useIssues";
 import React from "react";
+import { FixDialog } from "@/components/issues/fix-dialog";
 
 export default function IssuesPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -61,6 +63,9 @@ export default function IssuesPage() {
   const [sortBy, setSortBy] = useState<string>("created_at");
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [showIssueDetails, setShowIssueDetails] = useState(false);
+  const [showFixDialog, setShowFixDialog] = useState(false);
+  const [issueToFix, setIssueToFix] = useState<Issue | null>(null);
+  const [isUnresolving, setIsUnresolving] = useState<string | null>(null);
 
   // Fetch detailed issue data when an issue is selected
   const {
@@ -109,19 +114,24 @@ export default function IssuesPage() {
     setShowIssueDetails(true);
   };
 
-  const handleFixIssue = async (issue: Issue) => {
-    if (isFixing) return;
+  const handleOpenFixDialog = (issue: Issue) => {
+    setIssueToFix(issue);
+    setShowFixDialog(true);
+  };
 
-    setIsFixing(issue.id);
+  const handleApplyFix = async (fixData: {
+    new_value?: string;
+    comment?: string;
+  }) => {
+    if (!issueToFix || isFixing) return;
+
+    setIsFixing(issueToFix.id);
     try {
-      if (issue.suggested_value) {
-        await createFix(issue.id, {
-          new_value: issue.suggested_value,
-          comment: "Applied suggested fix",
-        });
+      if (fixData.new_value) {
+        await createFix(issueToFix.id, fixData);
         toast.success("Fix applied successfully");
       } else {
-        await resolveIssue(issue.id);
+        await resolveIssue(issueToFix.id);
         toast.success("Issue marked as resolved");
       }
 
@@ -129,7 +139,7 @@ export default function IssuesPage() {
       await Promise.all([invalidateIssuesData(), refetch()]);
 
       // Close issue details modal if it's open
-      if (selectedIssueId === issue.id) {
+      if (selectedIssueId === issueToFix.id) {
         setShowIssueDetails(false);
       }
     } catch (error: unknown) {
@@ -142,8 +152,39 @@ export default function IssuesPage() {
           ? (error as { message?: string }).message
           : "Failed to fix issue";
       toast.error(errorMessage);
+      throw error; // Re-throw to let FixDialog handle it
     } finally {
       setIsFixing(null);
+    }
+  };
+
+  const handleUnresolveIssue = async (issue: Issue) => {
+    if (isUnresolving) return;
+
+    setIsUnresolving(issue.id);
+    try {
+      await unresolveIssue(issue.id);
+      toast.success("Issue marked as unresolved");
+
+      // Invalidate and refetch all related queries for real-time updates
+      await Promise.all([invalidateIssuesData(), refetch()]);
+
+      // Close issue details modal if it's open
+      if (selectedIssueId === issue.id) {
+        setShowIssueDetails(false);
+      }
+    } catch (error: unknown) {
+      console.error("Unresolve error:", error);
+      const errorMessage =
+        error && typeof error === "object" && "response" in error
+          ? (error as { response?: { data?: { message?: string } } }).response
+              ?.data?.message
+          : error && typeof error === "object" && "message" in error
+          ? (error as { message?: string }).message
+          : "Failed to unresolve issue";
+      toast.error(errorMessage);
+    } finally {
+      setIsUnresolving(null);
     }
   };
 
@@ -551,13 +592,24 @@ export default function IssuesPage() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {!issue.resolved && (
+                      {!issue.resolved ? (
                         <Button
                           size="sm"
-                          onClick={() => handleFixIssue(issue)}
+                          onClick={() => handleOpenFixDialog(issue)}
                           disabled={isFixing === issue.id}
                         >
                           {isFixing === issue.id ? "Fixing..." : "Fix Issue"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleUnresolveIssue(issue)}
+                          disabled={isUnresolving === issue.id}
+                        >
+                          {isUnresolving === issue.id
+                            ? "Unresolving..."
+                            : "Unresolve"}
                         </Button>
                       )}
                     </div>
@@ -962,15 +1014,18 @@ export default function IssuesPage() {
                   </div>
                 )}
 
-                {!detailedIssue.resolved && (
-                  <div className="flex gap-2 pt-4 border-t">
+                <div className="flex gap-2 pt-4 border-t">
+                  {!detailedIssue.resolved ? (
                     <Button
                       onClick={() => {
-                        // Find the issue from the list to pass to handleFixIssue
+                        // Find the issue from the list to pass to handleOpenFixDialog
                         const issue = filteredIssues?.find(
                           (i) => i.id === detailedIssue.id
                         );
-                        if (issue) handleFixIssue(issue);
+                        if (issue) {
+                          handleOpenFixDialog(issue);
+                          setShowIssueDetails(false);
+                        }
                       }}
                       disabled={isFixing === detailedIssue.id}
                       className="flex-1"
@@ -981,18 +1036,44 @@ export default function IssuesPage() {
                         ? "Apply Suggested Fix"
                         : "Mark as Resolved"}
                     </Button>
+                  ) : (
                     <Button
                       variant="outline"
-                      onClick={() => setShowIssueDetails(false)}
+                      onClick={() => {
+                        // Find the issue from the list to pass to handleUnresolveIssue
+                        const issue = filteredIssues?.find(
+                          (i) => i.id === detailedIssue.id
+                        );
+                        if (issue) handleUnresolveIssue(issue);
+                      }}
+                      disabled={isUnresolving === detailedIssue.id}
+                      className="flex-1"
                     >
-                      Close
+                      {isUnresolving === detailedIssue.id
+                        ? "Unresolving..."
+                        : "Unresolve Issue"}
                     </Button>
-                  </div>
-                )}
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowIssueDetails(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
               </div>
             ) : null}
           </DialogContent>
         </Dialog>
+
+        {/* Fix Dialog */}
+        <FixDialog
+          issue={issueToFix}
+          open={showFixDialog}
+          onOpenChange={setShowFixDialog}
+          onSubmit={handleApplyFix}
+          isSubmitting={isFixing === issueToFix?.id}
+        />
       </div>
     </MainLayout>
   );

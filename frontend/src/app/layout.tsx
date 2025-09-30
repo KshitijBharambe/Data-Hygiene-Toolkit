@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     shortcut: '/favicon.svg',
     apple: { url: '/apple-touch-icon.svg', sizes: '180x180', type: 'image/svg+xml' },
   },
-  manifest: '/site.webmanifest',
+  manifest: '/manifest.json',
   themeColor: '#7c3aed',
 };
 

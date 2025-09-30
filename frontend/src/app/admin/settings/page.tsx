@@ -248,7 +248,7 @@ export default function AdminSettingsPage() {
     <MainLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
               <Settings className="h-8 w-8" />
@@ -258,14 +258,21 @@ export default function AdminSettingsPage() {
               Configure system-wide settings and preferences
             </p>
           </div>
-          <div className="flex gap-2">
-            {hasChanges && (
-              <Button variant="outline" onClick={handleReset}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reset
-              </Button>
-            )}
-            <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={!hasChanges}
+              className="flex-1 sm:flex-none"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Reset
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges || isSaving}
+              className="flex-1 sm:flex-none"
+            >
               {isSaving ? (
                 <>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />

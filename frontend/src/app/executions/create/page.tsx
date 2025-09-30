@@ -99,9 +99,21 @@ export default function CreateExecutionPage() {
       });
 
       router.push(`/executions/${execution.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create execution:", error);
-      alert("Failed to start execution. Please try again.");
+
+      // Extract error message from response
+      let errorMessage = "Failed to start execution. Please try again.";
+
+      if (error?.response?.status === 404) {
+        errorMessage = "Dataset file not found. The dataset may need to be re-uploaded. Please delete this dataset and upload it again.";
+      } else if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      alert(errorMessage);
     }
   };
 

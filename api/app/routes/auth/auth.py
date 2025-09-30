@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from app.database import get_session
 from app.models import User, UserRole
-from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse
+from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse, UserRoleUpdate
 from app.auth import (
     get_password_hash, 
     verify_password, 
@@ -102,7 +102,7 @@ async def list_users(
 @router.put("/users/{user_id}/role")
 async def update_user_role(
     user_id: str,
-    new_role: UserRole,
+    role_update: UserRoleUpdate,
     db: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -112,16 +112,88 @@ async def update_user_role(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can update user roles"
         )
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
-    user.role = new_role
+
+    user.role = role_update.role
     db.commit()
     db.refresh(user)
-    
+
     return {"message": "User role updated successfully", "user": UserResponse.model_validate(user)}
+
+@router.post("/setup-demo")
+async def setup_demo_account(
+    db: Session = Depends(get_session)
+):
+    """
+    Create a demo admin account if no users exist.
+    This endpoint is only available when the database is empty.
+    """
+    # Check if any users exist
+    user_count = db.query(User).count()
+    if user_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Demo account can only be created when database is empty"
+        )
+
+    # Create demo admin account
+    demo_email = "admin@datahygiene.com"
+    demo_password = "demo123"
+
+    hashed_password = get_password_hash(demo_password)
+    demo_user = User(
+        name="Demo Admin",
+        email=demo_email,
+        role=UserRole.admin,
+        auth_provider="local",
+        auth_subject=hashed_password
+    )
+
+    db.add(demo_user)
+    db.commit()
+    db.refresh(demo_user)
+
+    return {
+        "message": "Demo admin account created successfully",
+        "email": demo_email,
+        "password": demo_password,
+        "user": UserResponse.model_validate(demo_user)
+    }
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    # Only admins can delete users
+    if current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can delete users"
+        )
+
+    # Cannot delete yourself
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    db.delete(user)
+    db.commit()
+
+    return {"message": "User deleted successfully"}

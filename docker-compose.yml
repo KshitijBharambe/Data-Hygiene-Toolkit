@@ -1,24 +1,32 @@
 services:
   db:
-    image: postgres:15
+    image: postgres:16-alpine
     environment:
-      POSTGRES_USER: dh_user
-      POSTGRES_PASSWORD: dh_pass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: data_hygiene
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   migrations:
     build:
       context: .
       dockerfile: Dockerfile.migrations
     environment:
-      DATABASE_URL: postgresql+psycopg://dh_user:dh_pass@db:5432/data_hygiene
-    depends_on:
-      - db
+      DATABASE_URL: ${DATABASE_URL}
     command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - internal
 
@@ -27,10 +35,9 @@ services:
       context: .
       dockerfile: Dockerfile.fastapi
     environment:
-      DATABASE_URL: postgresql+psycopg://dh_user:dh_pass@db:5432/data_hygiene
-      ASYNC_DATABASE_URL: postgresql+asyncpg://dh_user:dh_pass@db:5432/data_hygiene
+      DATABASE_URL: ${DATABASE_URL}
+      ASYNC_DATABASE_URL: ${ASYNC_DATABASE_URL}
     depends_on:
-      - db
       - migrations
     ports:
       - "8000:8000"
@@ -57,9 +64,9 @@ services:
     networks:
       - internal
 
-volumes:
-  postgres_data:
-
 networks:
   internal:
     driver: bridge
+
+volumes:
+  postgres_data:

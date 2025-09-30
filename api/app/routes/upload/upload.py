@@ -140,7 +140,7 @@ async def delete_dataset(
         )
 
     # Check permissions
-    from app.models import UserRole
+    from app.models import UserRole, DatasetVersion, DatasetColumn, Execution, Issue, ExecutionRule
     # Cast to Dataset type to help type checker
     dataset = cast(Dataset, dataset)
     uploaded_by_id = str(getattr(dataset, 'uploaded_by', ''))
@@ -152,10 +152,74 @@ async def delete_dataset(
             detail="You don't have permission to delete this dataset"
         )
 
-    db.delete(dataset)
-    db.commit()
+    try:
+        # Delete related records in correct order to avoid foreign key violations
+        from app.models import Fix, Export
 
-    return {"message": "Dataset deleted successfully"}
+        # 1. Get all dataset versions
+        dataset_versions = db.query(DatasetVersion).filter(
+            DatasetVersion.dataset_id == dataset_id
+        ).all()
+
+        for version in dataset_versions:
+            # Get all executions for this version
+            executions = db.query(Execution).filter(
+                Execution.dataset_version_id == version.id
+            ).all()
+
+            for execution in executions:
+                # Get all issues for this execution
+                issues = db.query(Issue).filter(Issue.execution_id == execution.id).all()
+
+                # Delete fixes for each issue
+                for issue in issues:
+                    db.query(Fix).filter(Fix.issue_id == issue.id).delete()
+
+                # Delete issues
+                db.query(Issue).filter(Issue.execution_id == execution.id).delete()
+
+                # Delete execution rules
+                db.query(ExecutionRule).filter(ExecutionRule.execution_id == execution.id).delete()
+
+                # Delete exports for this execution
+                db.query(Export).filter(Export.execution_id == execution.id).delete()
+
+            # Delete executions
+            db.query(Execution).filter(Execution.dataset_version_id == version.id).delete()
+
+            # Delete exports for this version
+            db.query(Export).filter(Export.dataset_version_id == version.id).delete()
+
+        # 2. Delete dataset versions
+        db.query(DatasetVersion).filter(DatasetVersion.dataset_id == dataset_id).delete()
+
+        # 3. Delete dataset columns
+        db.query(DatasetColumn).filter(DatasetColumn.dataset_id == dataset_id).delete()
+
+        # 4. Delete the dataset file from storage
+        from app.services.data_import import DATASET_STORAGE_PATH
+        import os
+        for version in dataset_versions:
+            file_path = DATASET_STORAGE_PATH / f"{dataset_id}_v{version.version_no}.parquet"
+            if file_path.exists():
+                os.remove(file_path)
+
+        # 5. Finally delete the dataset itself
+        db.delete(dataset)
+        db.commit()
+
+        return {"message": "Dataset deleted successfully"}
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404, 403)
+        raise
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete dataset: {str(e)}"
+        )
 
 
 @router.get("/datasets/{dataset_id}/columns", response_model=List[DatasetColumnResponse])
