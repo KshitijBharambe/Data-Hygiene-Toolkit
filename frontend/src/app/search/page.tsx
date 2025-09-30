@@ -81,7 +81,7 @@ function SearchResultsContent() {
       ) : (
         <>
           {/* Pages & Actions */}
-          {data.pages && data.pages.length > 0 && (
+          {data?.pages && data.pages.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -96,7 +96,7 @@ function SearchResultsContent() {
                 {data.pages.map((result) => (
                   <Link
                     key={result.id}
-                    href={result.metadata.url || '#'}
+                    href={String(result.metadata.url || '#')}
                     className="block p-4 rounded-lg border hover:bg-accent transition-colors"
                   >
                     <div className="flex items-start justify-between">
@@ -114,7 +114,7 @@ function SearchResultsContent() {
           )}
 
           {/* Datasets */}
-          {data.datasets && data.datasets.length > 0 && (
+          {data?.datasets && data.datasets.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -129,7 +129,7 @@ function SearchResultsContent() {
                 {data.datasets.map((result) => (
                   <Link
                     key={result.id}
-                    href={result.metadata.is_static && result.metadata.url ? result.metadata.url : `/data/datasets?id=${result.id}`}
+                    href={result.metadata.is_static && result.metadata.url ? String(result.metadata.url) : `/data/datasets?id=${result.id}`}
                     className="block p-4 rounded-lg border hover:bg-accent transition-colors"
                   >
                     <div className="flex items-start justify-between">
@@ -140,10 +140,10 @@ function SearchResultsContent() {
                         </p>
                         <div className="flex gap-2">
                           <Badge variant="outline">
-                            {result.metadata.source_type}
+                            {String(result.metadata.source_type || '')}
                           </Badge>
                           <Badge variant="secondary">
-                            {result.metadata.status}
+                            {String(result.metadata.status || '')}
                           </Badge>
                         </div>
                       </div>
@@ -155,7 +155,7 @@ function SearchResultsContent() {
           )}
 
           {/* Rules */}
-          {data.rules && data.rules.length > 0 && (
+          {data?.rules && data.rules.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -181,7 +181,7 @@ function SearchResultsContent() {
                         </p>
                         <div className="flex gap-2">
                           <Badge variant="outline">
-                            {result.metadata.kind}
+                            {String(result.metadata.kind || '')}
                           </Badge>
                           <Badge
                             variant={
@@ -190,9 +190,9 @@ function SearchResultsContent() {
                                 : 'secondary'
                             }
                           >
-                            {result.metadata.criticality}
+                            {String(result.metadata.criticality || '')}
                           </Badge>
-                          {result.metadata.is_active && (
+                          {Boolean(result.metadata.is_active) && (
                             <Badge variant="default">Active</Badge>
                           )}
                         </div>
@@ -205,7 +205,7 @@ function SearchResultsContent() {
           )}
 
           {/* Executions */}
-          {data.executions && data.executions.length > 0 && (
+          {data?.executions && data.executions.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -238,7 +238,7 @@ function SearchResultsContent() {
                               : 'secondary'
                           }
                         >
-                          {result.metadata.status}
+                          {String(result.metadata.status || '')}
                         </Badge>
                       </div>
                     </div>
@@ -249,7 +249,7 @@ function SearchResultsContent() {
           )}
 
           {/* Issues */}
-          {data.issues && data.issues.length > 0 && (
+          {data?.issues && data.issues.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -271,7 +271,7 @@ function SearchResultsContent() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="font-semibold">{result.title}</h3>
-                          {result.metadata.resolved && (
+                          {Boolean(result.metadata.resolved) && (
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                           )}
                         </div>
@@ -285,7 +285,7 @@ function SearchResultsContent() {
                               : 'secondary'
                           }
                         >
-                          {result.metadata.severity}
+                          {String(result.metadata.severity || '')}
                         </Badge>
                       </div>
                     </div>

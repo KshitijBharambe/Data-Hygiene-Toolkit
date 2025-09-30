@@ -7,7 +7,7 @@ export interface SearchResult {
   id: string
   title: string
   description: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface SearchResponse {
@@ -38,7 +38,7 @@ export function useSearch(query: string, enabled: boolean = true) {
         }
       }
 
-      const response = await apiClient.client.get<SearchResponse>('/search/', {
+      const response = await apiClient.get<SearchResponse>('/search/', {
         params: { q: query, limit: 10 }
       })
       return response.data

@@ -99,18 +99,21 @@ export default function CreateExecutionPage() {
       });
 
       router.push(`/executions/${execution.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to create execution:", error);
 
       // Extract error message from response
       let errorMessage = "Failed to start execution. Please try again.";
 
-      if (error?.response?.status === 404) {
-        errorMessage = "Dataset file not found. The dataset may need to be re-uploaded. Please delete this dataset and upload it again.";
-      } else if (error?.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error?.message) {
-        errorMessage = error.message;
+      if (error && typeof error === 'object') {
+        const axiosError = error as { response?: { status?: number; data?: { detail?: string } }; message?: string }
+        if (axiosError.response?.status === 404) {
+          errorMessage = "Dataset file not found. The dataset may need to be re-uploaded. Please delete this dataset and upload it again.";
+        } else if (axiosError.response?.data?.detail) {
+          errorMessage = axiosError.response.data.detail;
+        } else if (axiosError.message) {
+          errorMessage = axiosError.message;
+        }
       }
 
       alert(errorMessage);

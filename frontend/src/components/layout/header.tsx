@@ -110,7 +110,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     }
   }
 
-  const getResultLink = (type: string, id: string, metadata?: any) => {
+  const getResultLink = (type: string, id: string, metadata?: Record<string, unknown>) => {
     // Check if this is a static suggestion with a URL
     if (metadata?.is_static && metadata?.url) {
       return metadata.url

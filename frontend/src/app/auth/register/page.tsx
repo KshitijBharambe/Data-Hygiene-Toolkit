@@ -53,9 +53,14 @@ export default function RegisterPage() {
       setTimeout(() => {
         router.push('/auth/login')
       }, 2000)
-    } catch (err: any) {
-      if (err.response?.data?.detail) {
-        setError(err.response.data.detail)
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosError = err as { response?: { data?: { detail?: string } } }
+        if (axiosError.response?.data?.detail) {
+          setError(axiosError.response.data.detail)
+        } else {
+          setError('Failed to create account. Please try again.')
+        }
       } else {
         setError('Failed to create account. Please try again.')
       }
