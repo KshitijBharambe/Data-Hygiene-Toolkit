@@ -1,12 +1,8 @@
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os
-from dotenv import load_dotenv
-
 
 # Import Database URL
-dotenv_loaded = load_dotenv(
-    dotenv_path="../migrations/.env.local", override=True)
 DB_URL = os.getenv("DATABASE_URL")
 if DB_URL is None:
     raise ValueError("DATABASE_URL environment variable is not set.")
