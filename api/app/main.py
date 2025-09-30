@@ -13,8 +13,8 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"https://.*-hzy3s-projects\.vercel\.app",
     allow_origins=[
-        "https://data-hygiene-toolkit-git-main-hzy3s-projects.vercel.app",
         "https://dht.kshitij.space",
         "https://kshitij.space",
         "https://*.kshitij.space",
