@@ -18,15 +18,11 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // Match all request paths except for the ones starting with:
-    // - api (API routes)
-    // - _next/static (static files)
-    // - _next/image (image optimization files)
-    // - favicon.ico (favicon file)
-    // - manifest.json (PWA manifest)
-    // - auth (auth pages)
-    // - test (test page)
-    // - root path (landing page)
-    '/((?!api|_next/static|_next/image|favicon|manifest.json|auth|test|$).*)',
+    // Protect all routes except:
+    // - Public static files
+    // - API routes
+    // - Auth pages
+    // - Landing page
+    '/((?!api/|_next/|favicon|manifest|auth/|test|$).*)',
   ],
 }

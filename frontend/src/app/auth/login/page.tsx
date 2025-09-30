@@ -59,6 +59,10 @@ export default function LoginPage() {
 
       if (!response.ok) {
         const data = await response.json()
+        // Check if it's the "database not empty" error
+        if (data.detail?.includes('database is empty') || data.detail?.includes('already exists')) {
+          throw new Error('Demo account already exists. Try logging in with: admin@datahygiene.com / demo123')
+        }
         throw new Error(data.detail || 'Failed to setup demo account')
       }
 
@@ -98,8 +102,11 @@ export default function LoginPage() {
       })
 
       if (result?.error) {
-        // If demo login fails, suggest setting up demo account
-        setError('Demo account not found. Click "Setup Demo Account" to create one.')
+        // If demo login fails, it could mean:
+        // 1. Demo account doesn't exist
+        // 2. Credentials are wrong
+        // 3. Backend is unreachable
+        setError('Demo login failed. The demo account may not exist or credentials may be incorrect. Contact your administrator or create a new account.')
       } else {
         // Check if sign in was successful
         const session = await getSession()
@@ -108,7 +115,7 @@ export default function LoginPage() {
         }
       }
     } catch {
-      setError('Demo login failed. Please try again.')
+      setError('Demo login failed. Please check your connection and try again.')
     } finally {
       setIsLoading(false)
     }
