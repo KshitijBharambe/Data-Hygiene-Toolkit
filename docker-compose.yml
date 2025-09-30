@@ -10,13 +10,28 @@ services:
     networks:
       - internal
 
-  api:
-    build: ./api
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
     environment:
-      DATABASE_URL: postgresql+psycopg2://dh_user:dh_pass@db:5432/data_hygiene
+      DATABASE_URL: postgresql+psycopg://dh_user:dh_pass@db:5432/data_hygiene
+    depends_on:
+      - db
+    command: alembic upgrade head
+    networks:
+      - internal
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    environment:
+      DATABASE_URL: postgresql+psycopg://dh_user:dh_pass@db:5432/data_hygiene
       ASYNC_DATABASE_URL: postgresql+asyncpg://dh_user:dh_pass@db:5432/data_hygiene
     depends_on:
       - db
+      - migrations
     ports:
       - "8000:8000"
     volumes:
@@ -26,21 +41,19 @@ services:
       - ./test_api.py:/app/test_api.py
       - ./test_rules_api.py:/app/test_rules_api.py
     working_dir: /app
-    command: sh -c "uvicorn main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     networks:
       - internal
 
-  frontend:
-    build: ./data-clean-ui
-    ports:
-      - "3000:3000"
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml --no-autoupdate run
+    volumes:
+      - ./cloudflared-config.yml:/etc/cloudflared/config.yml:ro
+      - ./63090a6f-b69a-457f-ac79-279f7c5c8fae.json:/etc/cloudflared/63090a6f-b69a-457f-ac79-279f7c5c8fae.json:ro
     depends_on:
       - api
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://api:8000
-    volumes:
-      - ./data-clean-ui:/app
-      - /app/node_modules
     networks:
       - internal
 

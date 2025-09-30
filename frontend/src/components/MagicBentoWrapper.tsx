@@ -325,7 +325,7 @@ const MagicCard: React.FC<{
   return (
     <div
       ref={cardRef}
-      className={`magic-bento-card ${className} relative overflow-hidden`}
+      className={`magic-bento-card ${className} relative overflow-hidden rounded-xl`}
       style={{ position: "relative", overflow: "hidden" }}
     >
       {children}
@@ -566,7 +566,7 @@ export const MagicBentoWrapper: React.FC<MagicBentoWrapperProps> = ({
                 rgba(${glowColor}, calc(var(--glow-intensity) * 0.8)) 0%,
                 rgba(${glowColor}, calc(var(--glow-intensity) * 0.4)) 30%,
                 transparent 60%);
-            border-radius: 0.75rem;
+            border-radius: 1rem;
             mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             mask-composite: subtract;
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);

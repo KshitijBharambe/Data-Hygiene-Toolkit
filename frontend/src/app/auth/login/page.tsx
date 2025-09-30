@@ -53,7 +53,7 @@ export default function LoginPage() {
 
     try {
       const result = await signIn('credentials', {
-        email: 'demo@datahygiene.com',
+        email: 'admin@datahygiene.com',
         password: 'demo123',
         redirect: false,
         callbackUrl: '/dashboard',

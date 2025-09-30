@@ -108,7 +108,7 @@ class ApiClient {
   }
 
   async register(userData: UserCreate): Promise<User> {
-    const response = await this.client.post<User>("/auth/register/", userData);
+    const response = await this.client.post<User>("/auth/register", userData);
     return response.data;
   }
 
@@ -117,7 +117,7 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<User> {
-    const response = await this.client.get<User>("/auth/me/");
+    const response = await this.client.get<User>("/auth/me");
     return response.data;
   }
 
@@ -411,7 +411,7 @@ class ApiClient {
 
   // User management endpoints (admin only)
   async getUsers(): Promise<User[]> {
-    const response = await this.client.get<User[]>("/auth/users/");
+    const response = await this.client.get<User[]>("/auth/users");
     return response.data;
   }
 
@@ -427,11 +427,11 @@ class ApiClient {
   }
 
   async deleteUser(userId: string): Promise<void> {
-    await this.client.delete(`/auth/users/${userId}/`);
+    await this.client.delete(`/auth/users/${userId}`);
   }
 
   async createUser(userData: UserCreate): Promise<User> {
-    const response = await this.client.post<User>("/auth/register/", userData);
+    const response = await this.client.post<User>("/auth/register", userData);
     return response.data;
   }
 

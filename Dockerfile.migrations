@@ -4,12 +4,13 @@ WORKDIR /api
 
 RUN pip install uv
 
-COPY ../pyproject.toml .
-COPY ../uv.lock .
+COPY pyproject.toml .
+COPY uv.lock .
 RUN uv pip install -r pyproject.toml --system --compile-bytecode
 
-COPY migrations/ ./migrations
-COPY app/ ./app
+COPY api/migrations/ ./migrations
+COPY api/migrations/alembic.ini ./alembic.ini
+COPY api/app/ ./app
 
 # Set PYTHONPATH to include the current directory so imports work
 ENV PYTHONPATH=/api 
