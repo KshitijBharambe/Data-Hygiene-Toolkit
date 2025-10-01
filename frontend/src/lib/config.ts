@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Centralized API configuration
  * Update this URL when the API endpoint changes

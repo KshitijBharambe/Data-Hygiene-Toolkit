@@ -1,3 +1,5 @@
+"use client";
+
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 import {
   User,
@@ -472,15 +474,19 @@ class ApiClient {
   }
 }
 
-// Create singleton instance lazily (only on client-side)
-let apiClient: ApiClient | null = null;
+// Create singleton instance - initialized on first access
+class ApiClientSingleton {
+  private static instance: ApiClient | null = null;
 
-function getApiClient(): ApiClient {
-  if (!apiClient) {
-    apiClient = new ApiClient();
+  static getInstance(): ApiClient {
+    if (!this.instance) {
+      this.instance = new ApiClient();
+    }
+    return this.instance;
   }
-  return apiClient;
 }
 
-export default getApiClient();
-export { ApiClient, getApiClient };
+const apiClient = ApiClientSingleton.getInstance();
+
+export default apiClient;
+export { ApiClient };
