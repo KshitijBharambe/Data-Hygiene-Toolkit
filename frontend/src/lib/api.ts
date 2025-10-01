@@ -33,6 +33,7 @@ class ApiClient {
   private token: string | null = null;
 
   constructor(baseURL: string = getApiUrl()) {
+    console.log('🚀 ApiClient constructor called with baseURL:', baseURL);
     this.client = axios.create({
       baseURL,
       headers: {
@@ -472,8 +473,15 @@ class ApiClient {
   }
 }
 
-// Create singleton instance
-const apiClient = new ApiClient();
+// Create singleton instance lazily (only on client-side)
+let apiClient: ApiClient | null = null;
 
-export default apiClient;
-export { ApiClient };
+function getApiClient(): ApiClient {
+  if (!apiClient) {
+    apiClient = new ApiClient();
+  }
+  return apiClient;
+}
+
+export default getApiClient();
+export { ApiClient, getApiClient };
