@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getApiUrl } from '@/lib/config'
 
-const API_URL = getApiUrl()
-
 export async function POST(_request: NextRequest) {
   try {
-    const response = await fetch(`${API_URL}/auth/setup-demo`, {
+    // Call getApiUrl() at runtime, not at module load
+    const apiUrl = getApiUrl()
+    const response = await fetch(`${apiUrl}/auth/setup-demo`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

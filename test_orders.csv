@@ -1,0 +1,26 @@
+order_id,customer_name,email,status,order_date,product_name,description
+ORD001,John Smith,john.smith@example.com,pending,2024-01-15,Laptop,High-performance laptop with 16GB RAM and 512GB SSD perfect for professionals
+ORD002,,invalid-email,processing,2024/01/16,Mouse,Short desc
+ORD003,Jane Doe,jane.doe@company.com,shipped,2024-01-17,Keyboard,Mechanical gaming keyboard with RGB lighting and programmable keys for enhanced productivity
+ORD004,Bob Wilson,bob@,completed,2024-01-18,Monitor,Professional 27-inch 4K monitor with HDR support and excellent color accuracy for creative work
+ORD005,Alice Johnson,alice.johnson@email.com,pending,01-19-2024,Headset,Premium noise-canceling wireless headset with 30-hour battery life and crystal clear audio quality
+ORD006,Charlie Brown,charlie.brown@test.org,processing,2024-01-20,Webcam,HD
+ORD007,,mike.davis@domain.com,invalid_status,2024-01-21,Microphone,Professional USB microphone with pop filter and adjustable stand for streaming and podcasting
+ORD008,Sarah Miller,sarah@miller,shipped,2024-01-22,Desk Lamp,Adjustable LED desk lamp with multiple brightness levels and color temperature settings for comfortable reading
+ORD009,Tom Anderson,tom.anderson@example.net,delivered,2024-01-23,USB Hub,Compact 7-port USB 3.0 hub with individual power switches and fast data transfer speeds for all devices
+ORD010,Emily White,emilywhite@invalid,cancelled,20240124,Cable,Premium braided USB-C cable with reinforced connectors and fast charging support up to 100W power delivery
+ORD011,David Lee,david.lee@company.io,pending,2024-01-25,Adapter,Multiport adapter supporting HDMI DisplayPort VGA and USB connections for maximum compatibility
+ORD012,,frank@email,processing,2024-01-26,Stand,Very short
+ORD013,Grace Taylor,grace.taylor@example.com,shipped,2024-01-27,Speaker,Portable bluetooth speaker with 360-degree sound IP67 waterproof rating and 20-hour battery life for outdoor use and travel adventures
+ORD014,Henry Davis,henry.davis@test.com,pending,2024-01-28,Charger,Fast wireless charger compatible with all Qi-enabled devices featuring overcharge protection and cooling system
+ORD015,Iris Chen,invalid.email.format,delivered,2024-01-29,Battery,High-capacity portable power bank 20000mAh with dual USB ports and LED display showing remaining charge
+ORD016,,julia.martinez@domain.com,cancelled,2024-01-30,Case,Durable protective case with shock absorption corner protection and precise cutouts for easy access to all ports and buttons making it perfect for daily use and providing excellent protection against drops scratches and impacts while maintaining a slim profile that fits comfortably in your hand or pocket without adding unnecessary bulk to your device ensuring maximum protection with minimum size increase and featuring a modern elegant design that complements your device perfectly
+ORD017,Kevin Wong,kevin.wong@example.org,PENDING,2024-01-31,Screen,Anti-glare screen protector with blue light filtering and oleophobic coating for smudge resistance
+ORD018,Linda Park,linda.park@company.com,Processing,2024-02-01,Cleaner,Small
+ORD019,Mark Johnson,mark@incomplete,shipped,2024-02-02,Bag,Spacious laptop backpack with padded compartments water-resistant material and ergonomic design for comfortable carrying
+ORD020,Nancy Kim,nancy.kim@test.net,delivered,02/03/2024,Pad,Extra-large gaming mouse pad with anti-slip rubber base and smooth surface for precise mouse control
+ORD021,,olivia@nodomain,cancelled,2024-02-04,Sleeve,Slim neoprene laptop sleeve with soft interior lining and exterior pocket for accessories
+ORD022,Paul Garcia,paul.garcia@example.com,pending,2024-02-05,Mat,Ergonomic desk mat with stitched edges memory foam wrist rest and water-resistant surface for comfortable computing
+ORD023,Quinn Rodriguez,quinn.rodriguez@company.io,unknown,2024-02-06,Light,LED strip lights with remote control multiple color modes and easy adhesive installation for ambient lighting
+ORD024,Rachel White,rachel@,processing,2024-02-07,Fan,Quiet USB desk fan with adjustable speed settings and 360-degree rotation for personal cooling
+ORD025,Steve Brown,steve.brown@test.org,shipped,2024-02-08,Organizer,Desktop organizer with multiple compartments cable management and phone stand for tidy workspace

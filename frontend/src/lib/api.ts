@@ -33,7 +33,6 @@ class ApiClient {
   private token: string | null = null;
 
   constructor(baseURL: string = getApiUrl()) {
-    console.log('🚀 ApiClient constructor called with baseURL:', baseURL);
     this.client = axios.create({
       baseURL,
       headers: {
@@ -44,11 +43,6 @@ class ApiClient {
     // Add request interceptor to include auth token
     this.client.interceptors.request.use(
       (config) => {
-        console.log('📤 Request interceptor:', {
-          baseURL: config.baseURL,
-          url: config.url,
-          fullURL: (config.baseURL || '') + (config.url || '')
-        });
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
@@ -144,7 +138,7 @@ class ApiClient {
   }
 
   async createDataset(dataset: DatasetCreate): Promise<Dataset> {
-    const response = await this.client.post<Dataset>("/data/datasets/", dataset);
+    const response = await this.client.post<Dataset>("/data/datasets", dataset);
     return response.data;
   }
 
@@ -228,7 +222,7 @@ class ApiClient {
 
   // Rule endpoints
   async getRules(): Promise<PaginatedResponse<Rule>> {
-    const response = await this.client.get<Rule[]>("/rules/", {
+    const response = await this.client.get<Rule[]>("/rules", {
       params: {
         active_only: false, // Get all rules, not just active ones
       },
@@ -245,45 +239,45 @@ class ApiClient {
   }
 
   async getRule(id: string): Promise<Rule> {
-    const response = await this.client.get<Rule>(`/rules/${id}/`);
+    const response = await this.client.get<Rule>(`/rules/${id}`);
     return response.data;
   }
 
   async createRule(rule: RuleCreate): Promise<Rule> {
-    const response = await this.client.post<Rule>("/rules/", rule);
+    const response = await this.client.post<Rule>("/rules", rule);
     return response.data;
   }
 
   async updateRule(id: string, rule: RuleUpdate): Promise<Rule> {
-    const response = await this.client.put<Rule>(`/rules/${id}/`, rule);
+    const response = await this.client.put<Rule>(`/rules/${id}`, rule);
     return response.data;
   }
 
   async deleteRule(id: string): Promise<void> {
-    await this.client.delete(`/rules/${id}/`);
+    await this.client.delete(`/rules/${id}`);
   }
 
   async testRule(
     ruleId: string,
     testData: RuleTestRequest
   ): Promise<{ success: boolean; message: string; results?: unknown }> {
-    const response = await this.client.post(`/rules/${ruleId}/test/`, testData);
+    const response = await this.client.post(`/rules/${ruleId}/test`, testData);
     return response.data;
   }
 
   async getRuleKinds(): Promise<
     { kind: string; description: string; parameters: unknown }[]
   > {
-    const response = await this.client.get("/rules/kinds/available/");
+    const response = await this.client.get("/rules/kinds/available");
     return response.data;
   }
 
   async activateRule(id: string): Promise<void> {
-    await this.client.patch(`/rules/${id}/activate/`);
+    await this.client.patch(`/rules/${id}/activate`);
   }
 
   async deactivateRule(id: string): Promise<void> {
-    await this.client.patch(`/rules/${id}/deactivate/`);
+    await this.client.patch(`/rules/${id}/deactivate`);
   }
 
   // Execution endpoints
@@ -292,7 +286,7 @@ class ApiClient {
     size: number = 20
   ): Promise<PaginatedResponse<Execution>> {
     const response = await this.client.get<PaginatedResponse<Execution>>(
-      "/executions/",
+      "/executions",
       {
         params: { page, size },
       }
@@ -301,13 +295,13 @@ class ApiClient {
   }
 
   async getExecution(id: string): Promise<Execution> {
-    const response = await this.client.get<Execution>(`/executions/${id}/`);
+    const response = await this.client.get<Execution>(`/executions/${id}`);
     return response.data;
   }
 
   async createExecution(execution: ExecutionCreate): Promise<Execution> {
     const response = await this.client.post<Execution>(
-      "/executions/",
+      "/executions",
       execution
     );
     return response.data;
@@ -330,30 +324,30 @@ class ApiClient {
     if (executionId) params.execution_id = executionId;
 
     const response = await this.client.get<PaginatedResponse<Issue>>(
-      "/issues/",
+      "/issues",
       { params }
     );
     return response.data;
   }
 
   async getIssue(id: string): Promise<Issue> {
-    const response = await this.client.get<Issue>(`/issues/${id}/`);
+    const response = await this.client.get<Issue>(`/issues/${id}`);
     return response.data;
   }
 
   async resolveIssue(id: string): Promise<Issue> {
-    const response = await this.client.post<Issue>(`/issues/${id}/resolve/`);
+    const response = await this.client.post<Issue>(`/issues/${id}/resolve`);
     return response.data;
   }
 
   // Fix endpoints
   async createFix(fix: FixCreate): Promise<Fix> {
-    const response = await this.client.post<Fix>("/fixes/", fix);
+    const response = await this.client.post<Fix>("/fixes", fix);
     return response.data;
   }
 
   async getFixes(issueId: string): Promise<Fix[]> {
-    const response = await this.client.get<Fix[]>(`/issues/${issueId}/fixes/`);
+    const response = await this.client.get<Fix[]>(`/issues/${issueId}/fixes`);
     return response.data;
   }
 
@@ -372,12 +366,12 @@ class ApiClient {
   }
 
   async createExport(exportData: ExportCreate): Promise<Export> {
-    const response = await this.client.post<Export>("/exports/", exportData);
+    const response = await this.client.post<Export>("/exports", exportData);
     return response.data;
   }
 
   async downloadExport(id: string): Promise<Blob> {
-    const response = await this.client.get(`/exports/${id}/download/`, {
+    const response = await this.client.get(`/exports/${id}/download`, {
       responseType: "blob",
     });
     return response.data;

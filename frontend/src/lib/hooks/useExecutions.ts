@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
 import { Execution, ExecutionCreate, PaginatedResponse } from "@/types/api";
-import { getApiUrl } from "@/lib/config";
 
 // Query keys
 const QUERY_KEYS = {
@@ -63,24 +62,8 @@ export function useCancelExecution() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      // The backend DELETE endpoint cancels executions
-      const baseURL = getApiUrl();
-
-      const response = await fetch(
-        `${baseURL}/executions/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${apiClient.getToken()}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to cancel execution");
-      }
-
-      return response.json();
+      // Use apiClient instead of direct fetch to ensure correct URL
+      return apiClient.delete(`/executions/${id}`);
     },
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.executions });
