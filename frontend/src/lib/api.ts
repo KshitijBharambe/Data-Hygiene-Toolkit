@@ -185,7 +185,7 @@ class ApiClient {
       filename: string;
       size: number;
       dataset_id: string;
-    }>("/data/upload/file/", formData, {
+    }>("/data/upload/file", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
