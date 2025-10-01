@@ -44,6 +44,11 @@ class ApiClient {
     // Add request interceptor to include auth token
     this.client.interceptors.request.use(
       (config) => {
+        console.log('📤 Request interceptor:', {
+          baseURL: config.baseURL,
+          url: config.url,
+          fullURL: config.baseURL + config.url
+        });
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
