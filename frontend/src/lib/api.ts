@@ -487,7 +487,7 @@ function getInstance(): ApiClient {
 const apiClient = new Proxy({} as ApiClient, {
   get(_target, prop: string) {
     const inst = getInstance();
-    const value = (inst as any)[prop];
+    const value = inst[prop as keyof ApiClient];
     return typeof value === 'function' ? value.bind(inst) : value;
   }
 });
