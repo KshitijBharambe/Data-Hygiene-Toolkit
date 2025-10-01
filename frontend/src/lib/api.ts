@@ -33,9 +33,14 @@ class ApiClient {
   private token: string | null = null;
 
   constructor(baseURL: string = getApiUrl()) {
-    console.log('🔧 ApiClient created with baseURL:', baseURL, 'NODE_ENV:', process.env.NODE_ENV);
+    // Ensure HTTPS in production
+    const secureURL = baseURL.startsWith('http://') && baseURL.includes('fly.dev')
+      ? baseURL.replace('http://', 'https://')
+      : baseURL;
+
+    console.log('🔧 ApiClient created with baseURL:', secureURL, 'NODE_ENV:', process.env.NODE_ENV);
     this.client = axios.create({
-      baseURL,
+      baseURL: secureURL,
       headers: {
         "Content-Type": "application/json",
       },

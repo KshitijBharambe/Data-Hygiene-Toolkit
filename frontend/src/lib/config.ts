@@ -11,6 +11,7 @@ export function getApiUrl(): string {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       return 'http://localhost:8000';
     }
+    // Force HTTPS for production
     return 'https://data-hygiene-toolkit.fly.dev';
   }
 
@@ -19,5 +20,6 @@ export function getApiUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   }
 
+  // Always return HTTPS URL for production
   return 'https://data-hygiene-toolkit.fly.dev';
 }
