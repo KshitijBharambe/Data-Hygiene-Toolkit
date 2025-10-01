@@ -33,6 +33,7 @@ class ApiClient {
   private token: string | null = null;
 
   constructor(baseURL: string = getApiUrl()) {
+    console.log('🔧 ApiClient created with baseURL:', baseURL, 'NODE_ENV:', process.env.NODE_ENV);
     this.client = axios.create({
       baseURL,
       headers: {
