@@ -23,6 +23,6 @@ export const config = {
     // - API routes
     // - Auth pages
     // - Landing page
-    '/((?!api/|_next/|favicon|manifest|auth/|test|$).*)',
+    '/((?!api/|_next/|favicon|manifest.json|auth/|test|$).*)',
   ],
 }
