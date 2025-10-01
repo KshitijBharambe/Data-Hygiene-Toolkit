@@ -473,22 +473,22 @@ class ApiClient {
   }
 }
 
-// Lazy singleton - instance created only when accessed
-let apiClientInstance: ApiClient | null = null;
+// Singleton instance - created on first access
+let instance: ApiClient | null = null;
 
-function getApiClientInstance(): ApiClient {
-  if (!apiClientInstance) {
-    apiClientInstance = new ApiClient();
+function getInstance(): ApiClient {
+  if (!instance) {
+    instance = new ApiClient();
   }
-  return apiClientInstance;
+  return instance;
 }
 
-// Export a proxy that lazily initializes the instance
+// Export proxy for lazy initialization
 const apiClient = new Proxy({} as ApiClient, {
-  get(target, prop) {
-    const instance = getApiClientInstance();
-    const value = instance[prop as keyof ApiClient];
-    return typeof value === 'function' ? value.bind(instance) : value;
+  get(_target, prop: string) {
+    const inst = getInstance();
+    const value = (inst as any)[prop];
+    return typeof value === 'function' ? value.bind(inst) : value;
   }
 });
 
