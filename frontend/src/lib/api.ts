@@ -478,13 +478,20 @@ class ApiClient {
   }
 }
 
-// Singleton instance - created on first access
+// Singleton instance - recreate on client-side to ensure correct URL
 let instance: ApiClient | null = null;
+let lastUrl: string | null = null;
 
 function getInstance(): ApiClient {
-  if (!instance) {
-    instance = new ApiClient();
+  const currentUrl = getApiUrl();
+
+  // Recreate instance if URL changed or doesn't exist
+  if (!instance || lastUrl !== currentUrl) {
+    console.log('🔄 Creating new ApiClient instance with URL:', currentUrl);
+    instance = new ApiClient(currentUrl);
+    lastUrl = currentUrl;
   }
+
   return instance;
 }
 
