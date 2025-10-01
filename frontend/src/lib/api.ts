@@ -47,7 +47,7 @@ class ApiClient {
         console.log('📤 Request interceptor:', {
           baseURL: config.baseURL,
           url: config.url,
-          fullURL: config.baseURL + config.url
+          fullURL: (config.baseURL || '') + (config.url || '')
         });
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
