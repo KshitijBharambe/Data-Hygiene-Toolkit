@@ -7,7 +7,8 @@ from app.routes import rules, executions, processing, reports, issues, search
 app = FastAPI(
     title="Data Hygiene Tool API",
     description="API for data quality management and cleansing",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False  # Prevent automatic slash redirects that break POST requests
 )
 
 # Add CORS middleware

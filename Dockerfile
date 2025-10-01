@@ -24,4 +24,5 @@ EXPOSE 8000
 
 # Production command (no reload)
 # --proxy-headers: Trust X-Forwarded-* headers from Fly.io proxy for correct HTTPS redirects
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# --forwarded-allow-ips='*': Allow all proxy IPs (Fly.io uses dynamic IPs)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
