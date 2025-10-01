@@ -52,6 +52,11 @@ class ApiClient {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
+
+        // Debug: Log the actual URL being requested
+        const fullUrl = config.baseURL ? `${config.baseURL}${config.url}` : config.url;
+        console.log('🌐 Axios request:', fullUrl);
+
         return config;
       },
       (error) => Promise.reject(error)
