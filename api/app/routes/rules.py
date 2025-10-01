@@ -15,7 +15,7 @@ from app.services.rule_engine import RuleEngineService
 router = APIRouter(prefix="/rules", tags=["Business Rules"])
 
 
-@router.get("/", response_model=List[RuleResponse])
+@router.get("", response_model=List[RuleResponse])
 async def list_rules(
     active_only: bool = Query(True, description="Filter to active rules only"),
     rule_kind: Optional[RuleKind] = Query(None, description="Filter by rule kind"),
@@ -56,7 +56,7 @@ async def get_rule(
     return RuleResponse.model_validate(rule)
 
 
-@router.post("/", response_model=RuleResponse)
+@router.post("", response_model=RuleResponse)
 async def create_rule(
     rule_data: RuleCreate,
     db: Session = Depends(get_session),

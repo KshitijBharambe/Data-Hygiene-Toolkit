@@ -31,7 +31,7 @@ class SearchResponse(BaseModel):
     issues: List[SearchResult]
 
 
-@router.get("/", response_model=SearchResponse)
+@router.get("", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results per category"),

@@ -11,7 +11,7 @@ from app.schemas import IssueResponse, FixCreate, FixResponse
 router = APIRouter(prefix="/issues", tags=["Issues & Fixes"])
 
 
-@router.get("/", response_model=List[IssueResponse])
+@router.get("", response_model=List[IssueResponse])
 async def get_issues(
     severity: Optional[Criticality] = Query(None, description="Filter by severity"),
     resolved: Optional[bool] = Query(None, description="Filter by resolution status"),

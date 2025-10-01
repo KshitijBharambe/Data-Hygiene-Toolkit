@@ -15,7 +15,7 @@ from app.models import (
 
 class RuleValidator(ABC):
     """Abstract base class for all rule validators"""
-    
+
     def __init__(self, rule: Rule, df: pd.DataFrame, db: Session):
         self.rule = rule
         self.df = df
@@ -23,6 +23,16 @@ class RuleValidator(ABC):
         # Handle SQLAlchemy model attribute access
         params_str = getattr(rule, 'params', None)
         self.params = json.loads(params_str) if params_str else {}
+
+        # Merge target_columns into params if not already present
+        # This ensures validators can access columns from either location
+        target_columns_str = getattr(rule, 'target_columns', None)
+        print(f"[DEBUG] Rule: {rule.name}, target_columns_str: {target_columns_str}, params before: {self.params}")
+        if target_columns_str:
+            target_columns = json.loads(target_columns_str) if isinstance(target_columns_str, str) else target_columns_str
+            if target_columns and 'columns' not in self.params:
+                self.params['columns'] = target_columns
+        print(f"[DEBUG] Rule: {rule.name}, params after: {self.params}")
     
     @abstractmethod
     def validate(self) -> List[Dict[str, Any]]:
@@ -825,7 +835,14 @@ class RuleEngineService:
                         params = json.loads(params_str) if params_str else {}
 
                         # Check if rule has required columns configured
+                        # Check both params['columns'] and target_columns field
                         target_columns = params.get('columns', [])
+                        if not target_columns:
+                            # Try getting from target_columns field
+                            target_columns_str = getattr(rule, 'target_columns', None)
+                            if target_columns_str:
+                                target_columns = json.loads(target_columns_str) if isinstance(target_columns_str, str) else target_columns_str
+
                         if not target_columns and rule_kind not in [RuleKind.custom]:
                             execution_rule.note = "Rule has no target columns configured"
                             failed_rules += 1

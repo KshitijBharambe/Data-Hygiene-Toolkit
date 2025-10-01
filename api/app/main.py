@@ -2,7 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.upload import upload
 from app.routes.auth import auth
-from app.routes import rules, executions, processing, reports, issues, search
+from app.routes import rules
+from app.routes import executions
+from app.routes import processing
+from app.routes import reports
+from app.routes import issues
+from app.routes import search
 
 app = FastAPI(
     title="Data Hygiene Tool API",

@@ -19,7 +19,7 @@ from app.services.rule_engine import RuleEngineService
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
 
 
-@router.get("/", response_model=Dict[str, Any])
+@router.get("", response_model=Dict[str, Any])
 async def list_executions(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
@@ -88,7 +88,7 @@ async def get_execution(
     return ExecutionResponse.model_validate(execution_dict)
 
 
-@router.post("/", response_model=ExecutionResponse)
+@router.post("", response_model=ExecutionResponse)
 async def create_execution(
     execution_data: ExecutionCreate,
     db: Session = Depends(get_session),
