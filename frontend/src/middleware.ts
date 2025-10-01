@@ -18,11 +18,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    // Protect all routes except:
-    // - Public static files
-    // - API routes
-    // - Auth pages
-    // - Landing page
-    '/((?!api/|_next/|favicon|manifest.json|auth/|test|$).*)',
+    // Protect all routes except static files, API, and auth
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|auth).*)',
   ],
 }
