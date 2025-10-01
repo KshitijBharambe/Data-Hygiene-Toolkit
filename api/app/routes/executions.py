@@ -23,8 +23,10 @@ router = APIRouter(prefix="/executions", tags=["Rule Executions"])
 async def list_executions(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    status_filter: Optional[ExecutionStatus] = Query(None, description="Filter by execution status"),
-    dataset_id: Optional[str] = Query(None, description="Filter by dataset ID"),
+    status_filter: Optional[ExecutionStatus] = Query(
+        None, description="Filter by execution status"),
+    dataset_id: Optional[str] = Query(
+        None, description="Filter by dataset ID"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -37,23 +39,27 @@ async def list_executions(
         query = query.filter(Execution.status == status_filter)
 
     if dataset_id:
-        query = query.join(DatasetVersion).filter(DatasetVersion.dataset_id == dataset_id)
+        query = query.join(DatasetVersion).filter(
+            DatasetVersion.dataset_id == dataset_id)
 
     # Get total count for pagination
     total = query.count()
 
     # Apply pagination
     offset = (page - 1) * size
-    executions = query.order_by(Execution.started_at.desc()).offset(offset).limit(size).all()
+    executions = query.order_by(Execution.started_at.desc()).offset(
+        offset).limit(size).all()
 
     # Enrich executions with issue counts
     execution_responses = []
     for execution in executions:
         execution_dict = execution.__dict__.copy()
         # Get issue count for this execution
-        issue_count = db.query(Issue).filter(Issue.execution_id == execution.id).count()
+        issue_count = db.query(Issue).filter(
+            Issue.execution_id == execution.id).count()
         execution_dict['total_issues'] = issue_count
-        execution_responses.append(ExecutionResponse.model_validate(execution_dict))
+        execution_responses.append(
+            ExecutionResponse.model_validate(execution_dict))
 
     return {
         "items": execution_responses,
@@ -73,7 +79,8 @@ async def get_execution(
     """
     Get details of a specific execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(
+        Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -82,7 +89,8 @@ async def get_execution(
 
     # Enrich execution with issue count
     execution_dict = execution.__dict__.copy()
-    issue_count = db.query(Issue).filter(Issue.execution_id == execution_id).count()
+    issue_count = db.query(Issue).filter(
+        Issue.execution_id == execution_id).count()
     execution_dict['total_issues'] = issue_count
 
     return ExecutionResponse.model_validate(execution_dict)
@@ -109,16 +117,19 @@ async def create_execution(
     print(f"Dataset version lookup result: {dataset_version}")
 
     if not dataset_version:
-        print(f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}")
+        print(
+            f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}")
         # If not found as version ID, try to find the latest version of the dataset
-        dataset = db.query(Dataset).filter(Dataset.id == execution_data.dataset_version_id).first()
+        dataset = db.query(Dataset).filter(
+            Dataset.id == execution_data.dataset_version_id).first()
         print(f"Dataset lookup result: {dataset}")
         if dataset:
             # Get the latest version for this dataset
             dataset_version = db.query(DatasetVersion).filter(
                 DatasetVersion.dataset_id == dataset.id
             ).order_by(DatasetVersion.created_at.desc()).first()
-            print(f"Latest dataset version for dataset {dataset.id}: {dataset_version}")
+            print(
+                f"Latest dataset version for dataset {dataset.id}: {dataset_version}")
 
             # If no versions exist, create one
             if not dataset_version:
@@ -203,16 +214,20 @@ async def create_execution(
 async def get_execution_issues(
     execution_id: str,
     limit: int = Query(100, ge=1, le=1000),
-    severity: Optional[str] = Query(None, description="Filter by issue severity"),
-    category: Optional[str] = Query(None, description="Filter by issue category"),
-    resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
+    severity: Optional[str] = Query(
+        None, description="Filter by issue severity"),
+    category: Optional[str] = Query(
+        None, description="Filter by issue category"),
+    resolved: Optional[bool] = Query(
+        None, description="Filter by resolution status"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
     """
     Get issues found during a specific execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(
+        Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -244,7 +259,8 @@ async def get_execution_summary(
     """
     Get summary statistics for an execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(
+        Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -266,7 +282,8 @@ async def get_execution_summary(
 
     for issue in issues:
         # Count by severity
-        severity = issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)
+        severity = issue.severity.value if hasattr(
+            issue.severity, 'value') else str(issue.severity)
         issues_by_severity[severity] = issues_by_severity.get(severity, 0) + 1
 
         # Count by category
@@ -302,7 +319,7 @@ async def get_execution_summary(
         "finished_at": execution.finished_at,
         "duration_seconds": (
             (execution.finished_at - execution.started_at).total_seconds()
-            if execution.finished_at and execution.started_at
+            if execution.finished_at is not None and execution.started_at is not None
             else None
         )
     }
@@ -312,12 +329,14 @@ async def get_execution_summary(
 async def cancel_execution(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)  # Only admins can cancel executions
+    # Only admins can cancel executions
+    current_user: User = Depends(get_admin_user)
 ):
     """
     Cancel a running execution (only for running executions)
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(
+        Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -331,11 +350,13 @@ async def cancel_execution(
         )
 
     # Update execution status to cancelled
-    execution.status = ExecutionStatus.failed  # Assuming no 'cancelled' status exists
+    # Assuming no 'cancelled' status exists
+    execution.status = ExecutionStatus.failed
     execution.finished_at = db.execute("SELECT NOW()").scalar()
 
     # Update summary with cancellation info
-    current_summary = json.loads(execution.summary) if execution.summary else {}
+    current_summary = json.loads(
+        execution.summary) if execution.summary else {}
     current_summary['cancelled_by'] = current_user.id
     current_summary['cancellation_reason'] = 'Manual cancellation'
     execution.summary = json.dumps(current_summary)
@@ -354,7 +375,8 @@ async def get_execution_rules(
     """
     Get performance details for each rule in an execution
     """
-    execution = db.query(Execution).filter(Execution.id == execution_id).first()
+    execution = db.query(Execution).filter(
+        Execution.id == execution_id).first()
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

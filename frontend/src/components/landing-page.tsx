@@ -151,7 +151,6 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-
       </div>
 
       {/* Floating animation elements */}
