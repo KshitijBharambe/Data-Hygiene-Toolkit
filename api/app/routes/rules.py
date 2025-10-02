@@ -11,6 +11,12 @@ from app.schemas import (
     IssueResponse, RuleTestRequest
 )
 from app.services.rule_engine import RuleEngineService
+from app.services.rule_versioning import (
+    create_rule_version,
+    update_rule_directly,
+    get_rule_root_id,
+    has_rule_been_used
+)
 
 router = APIRouter(prefix="/rules", tags=["Business Rules"])
 
@@ -97,7 +103,9 @@ async def update_rule(
     current_user: User = Depends(get_admin_user)
 ):
     """
-    Update an existing rule
+    Update an existing rule.
+    If the rule has been used in executions, creates a new version.
+    Otherwise, updates the rule directly.
     """
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
@@ -106,21 +114,15 @@ async def update_rule(
             detail="Rule not found"
         )
     
-    # Update fields if provided
-    update_data = rule_data.model_dump(exclude_unset=True)
-    
-    for field, value in update_data.items():
-        if field == 'target_columns':
-            setattr(rule, field, json.dumps(value))
-        elif field == 'params':
-            setattr(rule, field, json.dumps(value))
-        else:
-            setattr(rule, field, value)
-    
-    db.commit()
-    db.refresh(rule)
-    
-    return RuleResponse.model_validate(rule)
+    # Check if rule has been used in executions
+    if has_rule_been_used(rule_id, db):
+        # Create new version instead of updating
+        new_version = await create_rule_version(rule, rule_data, current_user, db)
+        return RuleResponse.model_validate(new_version)
+    else:
+        # Safe to update directly if never used
+        updated_rule = await update_rule_directly(rule, rule_data, db)
+        return RuleResponse.model_validate(updated_rule)
 
 
 @router.patch("/{rule_id}/activate")
@@ -174,7 +176,9 @@ async def delete_rule(
     current_user: User = Depends(get_admin_user)
 ):
     """
-    Delete a rule (only if no executions exist)
+    Delete a rule.
+    If the rule has been used in executions, performs soft delete (deactivates).
+    Otherwise, performs hard delete.
     """
     rule = db.query(Rule).filter(Rule.id == rule_id).first()
     if not rule:
@@ -184,20 +188,27 @@ async def delete_rule(
         )
     
     # Check if rule has been used in any executions
-    executions_count = db.query(Execution).join(
-        Execution.execution_rules
-    ).filter_by(rule_id=rule_id).count()
+    if has_rule_been_used(rule_id, db):
+        # Soft delete - just deactivate and mark as not latest
+        rule.is_active = False
+        rule.is_latest = False
+        db.commit()
+        return {
+            "message": "Rule has been deactivated (soft delete) as it was used in executions",
+            "rule_id": rule_id,
+            "deleted": False,
+            "deactivated": True
+        }
     
-    if executions_count > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot delete rule that has been used in executions. Deactivate instead."
-        )
-    
+    # Hard delete if never used
     db.delete(rule)
     db.commit()
     
-    return {"message": "Rule deleted successfully"}
+    return {
+        "message": "Rule deleted successfully",
+        "rule_id": rule_id,
+        "deleted": True
+    }
 
 
 @router.post("/{rule_id}/test", response_model=Dict[str, Any])
@@ -370,6 +381,69 @@ async def get_rule_executions(
     ).limit(limit).all()
     
     return [ExecutionResponse.model_validate(execution) for execution in executions]
+
+
+@router.get("/{rule_id}/versions", response_model=List[RuleResponse])
+async def get_rule_versions(
+    rule_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get all versions of a rule
+    """
+    # Get the rule (could be any version)
+    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rule not found"
+        )
+    
+    # Find the root rule (original)
+    root_rule_id = get_rule_root_id(rule)
+    
+    # Get all versions
+    versions = db.query(Rule).filter(
+        (Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)
+    ).order_by(Rule.version.desc()).all()
+    
+    return [RuleResponse.model_validate(v) for v in versions]
+
+
+@router.get("/{rule_id}/version/{version_number}", response_model=RuleResponse)
+async def get_rule_version(
+    rule_id: str,
+    version_number: int,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get a specific version of a rule
+    """
+    # Find root rule
+    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rule not found"
+        )
+    
+    root_rule_id = get_rule_root_id(rule)
+    
+    # Find the specific version
+    version = db.query(Rule).filter(
+        ((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)),
+        Rule.version == version_number
+    ).first()
+    
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {version_number} not found"
+        )
+    
+    return RuleResponse.model_validate(version)
 
 
 @router.get("/{rule_id}/issues", response_model=List[IssueResponse])

@@ -1,23 +1,29 @@
-'use client'
-
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { MainLayout } from '@/components/layout/main-layout'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
+"use client";
+import { use } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { MainLayout } from "@/components/layout/main-layout";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Form,
   FormControl,
@@ -26,140 +32,232 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form'
-import { useRule, useUpdateRule, useDeleteRule, useActivateRule, useDeactivateRule } from '@/lib/hooks/useRules'
-import { RuleKind, Criticality } from '@/types/api'
-import { ArrowLeft, Shield, Play, Pause, Trash2, Save, AlertTriangle } from 'lucide-react'
-import Link from 'next/link'
-import { format } from 'date-fns'
+} from "@/components/ui/form";
+import {
+  useRule,
+  useUpdateRule,
+  useDeleteRule,
+  useActivateRule,
+  useDeactivateRule,
+} from "@/lib/hooks/useRules";
+import { RuleKind, Criticality } from "@/types/api";
+import {
+  ArrowLeft,
+  Shield,
+  Play,
+  Pause,
+  Trash2,
+  Save,
+  AlertTriangle,
+} from "lucide-react";
+import Link from "next/link";
+import { format } from "date-fns";
 
 const updateRuleSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(255, 'Name must be 255 characters or less'),
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(255, "Name must be 255 characters or less"),
   description: z.string().optional(),
-  kind: z.enum(['missing_data', 'standardization', 'value_list', 'length_range', 'cross_field', 'char_restriction', 'regex', 'custom']),
-  criticality: z.enum(['low', 'medium', 'high', 'critical']),
-  target_columns: z.string().min(1, 'At least one target column is required'),
+  kind: z.enum([
+    "missing_data",
+    "standardization",
+    "value_list",
+    "length_range",
+    "cross_field",
+    "char_restriction",
+    "regex",
+    "custom",
+  ]),
+  criticality: z.enum(["low", "medium", "high", "critical"]),
+  target_columns: z.string().min(1, "At least one target column is required"),
   params: z.string().optional(),
-})
+});
 
-type UpdateRuleFormData = z.infer<typeof updateRuleSchema>
+type UpdateRuleFormData = z.infer<typeof updateRuleSchema>;
 
 const criticalityColors: Record<Criticality, string> = {
-  low: 'bg-blue-100 text-blue-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  high: 'bg-orange-100 text-orange-800',
-  critical: 'bg-red-100 text-red-800'
-}
+  low: "bg-blue-100 text-blue-800",
+  medium: "bg-yellow-100 text-yellow-800",
+  high: "bg-orange-100 text-orange-800",
+  critical: "bg-red-100 text-red-800",
+};
 
 const ruleKindLabels: Record<RuleKind, string> = {
-  missing_data: 'Missing Data',
-  standardization: 'Standardization',
-  value_list: 'Value List',
-  length_range: 'Length Range',
-  cross_field: 'Cross Field',
-  char_restriction: 'Character Restriction',
-  regex: 'Regex Pattern',
-  custom: 'Custom Rule'
-}
+  missing_data: "Missing Data",
+  standardization: "Standardization",
+  value_list: "Value List",
+  length_range: "Length Range",
+  cross_field: "Cross Field",
+  char_restriction: "Character Restriction",
+  regex: "Regex Pattern",
+  custom: "Custom Rule",
+};
 
 const criticalityOptions: { value: Criticality; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical' }
-]
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+];
 
 const ruleKindOptions: { value: RuleKind; label: string }[] = [
-  { value: 'missing_data', label: 'Missing Data' },
-  { value: 'standardization', label: 'Standardization' },
-  { value: 'value_list', label: 'Value List' },
-  { value: 'length_range', label: 'Length Range' },
-  { value: 'char_restriction', label: 'Character Restriction' },
-  { value: 'cross_field', label: 'Cross Field' },
-  { value: 'regex', label: 'Regex Pattern' },
-  { value: 'custom', label: 'Custom Rule' }
-]
+  { value: "missing_data", label: "Missing Data" },
+  { value: "standardization", label: "Standardization" },
+  { value: "value_list", label: "Value List" },
+  { value: "length_range", label: "Length Range" },
+  { value: "char_restriction", label: "Character Restriction" },
+  { value: "cross_field", label: "Cross Field" },
+  { value: "regex", label: "Regex Pattern" },
+  { value: "custom", label: "Custom Rule" },
+];
 
-export default function RuleDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter()
-  const [isEditing, setIsEditing] = useState(false)
+export default function RuleDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
 
-  const { data: rule, isLoading, error } = useRule(params.id)
-  const updateRule = useUpdateRule()
-  const deleteRule = useDeleteRule()
-  const activateRule = useActivateRule()
-  const deactivateRule = useDeactivateRule()
+  const router = useRouter();
+  const [isEditing, setIsEditing] = useState(false);
+
+  const { data: rule, isLoading, error } = useRule(id);
+  const updateRule = useUpdateRule();
+  const deleteRule = useDeleteRule();
+  const activateRule = useActivateRule();
+  const deactivateRule = useDeactivateRule();
 
   const form = useForm<UpdateRuleFormData>({
     resolver: zodResolver(updateRuleSchema),
-    values: rule ? {
-      name: rule.name,
-      description: rule.description || '',
-      kind: rule.kind,
-      criticality: rule.criticality,
-      target_columns: Array.isArray(rule.target_columns)
-        ? rule.target_columns.join(', ')
-        : rule.target_columns || '',
-      params: rule.params ? JSON.stringify(rule.params, null, 2) : '',
-    } : undefined,
-  })
+    values: rule
+      ? {
+          name: rule.name,
+          description: rule.description || "",
+          kind: rule.kind,
+          criticality: rule.criticality,
+          target_columns: Array.isArray(rule.target_columns)
+            ? rule.target_columns.join(", ")
+            : rule.target_columns || "",
+          params: (() => {
+            // Handle params - it might be a string or object
+            if (!rule.params) return "";
+            if (typeof rule.params === 'string') {
+              try {
+                // If it's already valid JSON string, parse and re-stringify for formatting
+                const parsed = JSON.parse(rule.params);
+                return JSON.stringify(parsed, null, 2);
+              } catch {
+                // If parsing fails, return as-is
+                return rule.params;
+              }
+            }
+            // If it's already an object, stringify it
+            return JSON.stringify(rule.params, null, 2);
+          })(),
+        }
+      : undefined,
+  });
 
   const onSubmit = async (data: UpdateRuleFormData) => {
-    if (!rule) return
+    if (!rule) return;
 
     try {
       // Parse target columns and params
-      const targetColumns = data.target_columns.split(',').map(col => col.trim()).filter(Boolean)
-      let params = undefined
+      const targetColumns = data.target_columns
+        .split(",")
+        .map((col) => col.trim())
+        .filter(Boolean);
+      
+      // Build the payload object
+      const payload: any = {
+        name: data.name,
+        kind: data.kind,
+        criticality: data.criticality,
+        target_columns: targetColumns,
+      };
 
-      if (data.params) {
-        try {
-          params = JSON.parse(data.params)
-        } catch {
-          form.setError('params', { message: 'Invalid JSON format in parameters' })
-          return
-        }
+      // Only add description if it has a value
+      if (data.description && data.description.trim()) {
+        payload.description = data.description;
       }
+
+      // Only add params if it's valid JSON
+      if (data.params && data.params.trim()) {
+        try {
+          const parsedParams = JSON.parse(data.params);
+          console.log('✅ Parsed params:', parsedParams, 'Type:', typeof parsedParams);
+          payload.params = parsedParams;
+        } catch (e) {
+          console.error('❌ Failed to parse params:', data.params);
+          form.setError("params", {
+            message: "Invalid JSON format in parameters",
+          });
+          return;
+        }
+      } else {
+        console.log('ℹ️ No params provided, omitting from payload');
+      }
+
+      console.log('📤 Sending update payload:', JSON.stringify(payload, null, 2));
 
       await updateRule.mutateAsync({
         id: rule.id,
-        data: {
-          name: data.name,
-          description: data.description || undefined,
-          kind: data.kind,
-          criticality: data.criticality,
-          target_columns: targetColumns,
-          params,
-        }
-      })
+        data: payload,
+      });
 
-      setIsEditing(false)
-    } catch (error) {
-      console.error('Failed to update rule:', error)
+      setIsEditing(false);
+    } catch (error: any) {
+      console.error("Failed to update rule:", error);
+      
+      // Log detailed error information
+      if (error.response) {
+        console.error("Error response:", error.response.data);
+        console.error("Error status:", error.response.status);
+        console.error("Error headers:", error.response.headers);
+      }
+      
+      // Show user-friendly error message
+      if (error.response?.status === 422) {
+        const detail = error.response.data?.detail;
+        if (Array.isArray(detail)) {
+          // Pydantic validation errors
+          const errors = detail.map((err: any) => 
+            `${err.loc.join('.')}: ${err.msg}`
+          ).join(', ');
+          alert(`Validation error: ${errors}`);
+        } else {
+          alert(`Validation error: ${detail || 'Invalid data format'}`);
+        }
+      }
     }
-  }
+  };
 
   const handleActivateToggle = () => {
-    if (!rule) return
+    if (!rule) return;
 
     if (rule.is_active) {
-      deactivateRule.mutate(rule.id)
+      deactivateRule.mutate(rule.id);
     } else {
-      activateRule.mutate(rule.id)
+      activateRule.mutate(rule.id);
     }
-  }
+  };
 
   const handleDelete = () => {
-    if (!rule) return
+    if (!rule) return;
 
-    if (confirm('Are you sure you want to delete this rule? This action cannot be undone.')) {
+    if (
+      confirm(
+        "Are you sure you want to delete this rule? This action cannot be undone."
+      )
+    ) {
       deleteRule.mutate(rule.id, {
         onSuccess: () => {
-          router.push('/rules')
-        }
-      })
+          router.push("/rules");
+        },
+      });
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -168,7 +266,7 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
           <div className="text-muted-foreground">Loading rule...</div>
         </div>
       </MainLayout>
-    )
+    );
   }
 
   if (error || !rule) {
@@ -176,11 +274,13 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
       <MainLayout>
         <div className="flex items-center justify-center h-64">
           <div className="text-red-600">
-            {error ? `Error loading rule: ${(error as Error).message}` : 'Rule not found'}
+            {error
+              ? `Error loading rule: ${(error as Error).message}`
+              : "Rule not found"}
           </div>
         </div>
       </MainLayout>
-    )
+    );
   }
 
   return (
@@ -200,7 +300,7 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                 {rule.name}
               </h1>
               <p className="text-muted-foreground mt-2">
-                {rule.description || 'No description provided'}
+                {rule.description || "No description provided"}
               </p>
             </div>
           </div>
@@ -224,9 +324,7 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                     </>
                   )}
                 </Button>
-                <Button onClick={() => setIsEditing(true)}>
-                  Edit Rule
-                </Button>
+                <Button onClick={() => setIsEditing(true)}>Edit Rule</Button>
                 <Button
                   variant="destructive"
                   onClick={handleDelete}
@@ -253,7 +351,10 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                 </CardHeader>
                 <CardContent>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <form
+                      onSubmit={form.handleSubmit(onSubmit)}
+                      className="space-y-6"
+                    >
                       <FormField
                         control={form.control}
                         name="name"
@@ -289,7 +390,10 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Rule Type</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue />
@@ -297,7 +401,10 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                                 </FormControl>
                                 <SelectContent>
                                   {ruleKindOptions.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
                                       {option.label}
                                     </SelectItem>
                                   ))}
@@ -314,7 +421,10 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Criticality</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
                                 <FormControl>
                                   <SelectTrigger>
                                     <SelectValue />
@@ -322,7 +432,10 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                                 </FormControl>
                                 <SelectContent>
                                   {criticalityOptions.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
+                                    <SelectItem
+                                      key={option.value}
+                                      value={option.value}
+                                    >
                                       {option.label}
                                     </SelectItem>
                                   ))}
@@ -371,9 +484,13 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                       <div className="flex gap-4">
                         <Button type="submit" disabled={updateRule.isPending}>
                           <Save className="h-4 w-4 mr-2" />
-                          {updateRule.isPending ? 'Saving...' : 'Save Changes'}
+                          {updateRule.isPending ? "Saving..." : "Save Changes"}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsEditing(false)}
+                        >
                           Cancel
                         </Button>
                       </div>
@@ -392,7 +509,9 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Type</label>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Type
+                      </label>
                       <div className="mt-1">
                         <Badge variant="outline">
                           {ruleKindLabels[rule.kind] || rule.kind}
@@ -400,7 +519,9 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                       </div>
                     </div>
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Criticality</label>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Criticality
+                      </label>
                       <div className="mt-1">
                         <Badge className={criticalityColors[rule.criticality]}>
                           {rule.criticality}
@@ -410,11 +531,13 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Target Columns</label>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Target Columns
+                    </label>
                     <div className="mt-1">
                       <code className="text-sm bg-muted px-2 py-1 rounded">
                         {Array.isArray(rule.target_columns)
-                          ? rule.target_columns.join(', ')
+                          ? rule.target_columns.join(", ")
                           : rule.target_columns}
                       </code>
                     </div>
@@ -422,7 +545,9 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
 
                   {rule.params && (
                     <div>
-                      <label className="text-sm font-medium text-muted-foreground">Parameters</label>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Parameters
+                      </label>
                       <div className="mt-1">
                         <pre className="text-sm bg-muted p-3 rounded overflow-x-auto">
                           {JSON.stringify(rule.params, null, 2)}
@@ -444,20 +569,26 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Status</span>
-                  <Badge variant={rule.is_active ? 'default' : 'secondary'}>
-                    {rule.is_active ? 'Active' : 'Inactive'}
+                  <Badge variant={rule.is_active ? "default" : "secondary"}>
+                    {rule.is_active ? "Active" : "Inactive"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Created</span>
-                  <span className="text-sm">{format(new Date(rule.created_at), 'MMM d, yyyy')}</span>
+                  <span className="text-sm">
+                    {format(new Date(rule.created_at), "MMM d, yyyy")}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Updated</span>
-                  <span className="text-sm">{format(new Date(rule.updated_at), 'MMM d, yyyy')}</span>
+                  <span className="text-sm">
+                    {format(new Date(rule.updated_at), "MMM d, yyyy")}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Created by</span>
+                  <span className="text-sm text-muted-foreground">
+                    Created by
+                  </span>
                   <span className="text-sm">{rule.created_by}</span>
                 </div>
               </CardContent>
@@ -473,7 +604,8 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-yellow-700">
-                    This rule is currently inactive and will not be executed during quality checks.
+                    This rule is currently inactive and will not be executed
+                    during quality checks.
                   </p>
                 </CardContent>
               </Card>
@@ -482,5 +614,5 @@ export default function RuleDetailPage({ params }: { params: { id: string } }) {
         </div>
       </div>
     </MainLayout>
-  )
+  );
 }

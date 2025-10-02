@@ -12,7 +12,7 @@ const getApiClient = async () => {
 
 export default NextAuth({
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV === 'development',
+  debug: process.env.NODE_ENV === "development",
   providers: [
     CredentialsProvider({
       name: "credentials",
@@ -75,7 +75,9 @@ export default NextAuth({
 
             // Handle specific error cases
             if (axiosError.response?.status === 502) {
-              console.error("502 Bad Gateway: Backend API server is unreachable");
+              console.error(
+                "502 Bad Gateway: Backend API server is unreachable"
+              );
             }
           } else if (error && typeof error === "object" && "message" in error) {
             console.error("Network error:", (error as Error).message);
@@ -91,7 +93,13 @@ export default NextAuth({
     error: "/auth/error",
   },
   callbacks: {
-    async jwt({ token, user }: { token: JWT; user?: User & { accessToken?: string; role?: string } }) {
+    async jwt({
+      token,
+      user,
+    }: {
+      token: JWT;
+      user?: User & { accessToken?: string; role?: string };
+    }) {
       if (user) {
         token.accessToken = user.accessToken;
         token.role = user.role;

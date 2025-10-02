@@ -122,7 +122,7 @@ export interface RuleUpdate {
   is_active?: boolean;
   target_table?: string;
   target_columns?: string[];
-  params?: Record<string, unknown>;
+  params?: Record<string, unknown> | null;
 }
 
 // Execution types

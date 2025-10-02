@@ -132,7 +132,7 @@ class Rule(Base):
     __tablename__ = "rules"
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    name = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False, index=True)  # Removed unique constraint for versioning
     description = Column(Text)
     kind = Column(ENUM(RuleKind), nullable=False)
     criticality = Column(ENUM(Criticality), nullable=False)
@@ -144,11 +144,18 @@ class Rule(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
+    # Versioning fields
+    version = Column(Integer, default=1, nullable=False)
+    parent_rule_id = Column(String, ForeignKey("rules.id"), nullable=True)
+    is_latest = Column(Boolean, default=True, nullable=False, index=True)
+    change_log = Column(Text, nullable=True)  # JSON string of changes
+    
     # Relationships
     creator = relationship("User", back_populates="created_rules")
     rule_columns = relationship("RuleColumn", back_populates="rule")
     execution_rules = relationship("ExecutionRule", back_populates="rule")
     issues = relationship("Issue", back_populates="rule")
+    child_versions = relationship("Rule", backref="parent_version", remote_side=[id], foreign_keys=[parent_rule_id])
 
 class RuleColumn(Base):
     __tablename__ = "rule_columns"

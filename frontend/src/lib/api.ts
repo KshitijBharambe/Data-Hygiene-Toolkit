@@ -260,6 +260,7 @@ class ApiClient {
   }
 
   async updateRule(id: string, rule: RuleUpdate): Promise<Rule> {
+    console.log('🔧 API Client updateRule called with:', { id, rule });
     const response = await this.client.put<Rule>(`/rules/${id}`, rule);
     return response.data;
   }

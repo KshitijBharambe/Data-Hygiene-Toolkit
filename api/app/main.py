@@ -13,20 +13,19 @@ app = FastAPI(
     title="Data Hygiene Tool API",
     description="API for data quality management and cleansing",
     version="1.0.0",
-    redirect_slashes=False  # Prevent automatic slash redirects that break POST requests
+    redirect_slashes=True  # Prevent automatic slash redirects that break POST requests
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*-hzy3s-projects\.vercel\.app",
     allow_origins=[
         "https://dht.kshitij.space",
         "https://kshitij.space",
-        "https://*.kshitij.space",
         "http://localhost:3000",
         "http://localhost:8000",
     ],
+    allow_origin_regex=r"https://.*-hzy3s-projects\.vercel\.app|https://.*\.kshitij\.space",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,6 +40,7 @@ app.include_router(processing.router)
 app.include_router(reports.router)
 app.include_router(issues.router)
 app.include_router(search.router)
+
 
 @app.get("/")
 def read_root():
