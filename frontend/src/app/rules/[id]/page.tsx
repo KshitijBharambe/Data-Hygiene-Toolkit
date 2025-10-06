@@ -170,7 +170,7 @@ export default function RuleDetailPage({
         .filter(Boolean);
       
       // Build the payload object
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         name: data.name,
         kind: data.kind,
         criticality: data.criticality,
@@ -189,7 +189,7 @@ export default function RuleDetailPage({
           console.log('✅ Parsed params:', parsedParams, 'Type:', typeof parsedParams);
           payload.params = parsedParams;
         } catch (e) {
-          console.error('❌ Failed to parse params:', data.params);
+          console.error('❌ Failed to parse params:', data.params, e);
           form.setError("params", {
             message: "Invalid JSON format in parameters",
           });
@@ -207,22 +207,23 @@ export default function RuleDetailPage({
       });
 
       setIsEditing(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to update rule:", error);
       
       // Log detailed error information
-      if (error.response) {
-        console.error("Error response:", error.response.data);
-        console.error("Error status:", error.response.status);
-        console.error("Error headers:", error.response.headers);
+      const axiosError = error as { response?: { data?: { detail?: unknown }; status?: number; headers?: unknown } };
+      if (axiosError.response) {
+        console.error("Error response:", axiosError.response.data);
+        console.error("Error status:", axiosError.response.status);
+        console.error("Error headers:", axiosError.response.headers);
       }
       
       // Show user-friendly error message
-      if (error.response?.status === 422) {
-        const detail = error.response.data?.detail;
+      if (axiosError.response?.status === 422) {
+        const detail = axiosError.response.data?.detail;
         if (Array.isArray(detail)) {
           // Pydantic validation errors
-          const errors = detail.map((err: any) => 
+          const errors = detail.map((err: { loc: string[]; msg: string }) => 
             `${err.loc.join('.')}: ${err.msg}`
           ).join(', ');
           alert(`Validation error: ${errors}`);

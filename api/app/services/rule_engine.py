@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import re
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -8,9 +9,13 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
 from app.models import (
-    Rule, RuleKind, Execution, ExecutionRule, Issue, 
+    Rule, RuleKind, Execution, ExecutionRule, Issue,
     DatasetVersion, User, Criticality, ExecutionStatus
 )
+from app.utils import ChunkedDataFrameReader, MemoryMonitor
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class RuleValidator(ABC):
@@ -20,6 +25,8 @@ class RuleValidator(ABC):
         self.rule = rule
         self.df = df
         self.db = db
+        self.chunked_reader = ChunkedDataFrameReader(chunk_size=5000)
+
         # Handle SQLAlchemy model attribute access
         params_str = getattr(rule, 'params', None)
         self.params = json.loads(params_str) if params_str else {}
@@ -33,14 +40,14 @@ class RuleValidator(ABC):
             if target_columns and 'columns' not in self.params:
                 self.params['columns'] = target_columns
         print(f"[DEBUG] Rule: {rule.name}, params after: {self.params}")
-    
+
     @abstractmethod
     def validate(self) -> List[Dict[str, Any]]:
         """
         Validate data against the rule and return list of issues
         Returns: List of issue dictionaries with keys:
             - row_index: int
-            - column_name: str  
+            - column_name: str
             - current_value: str
             - suggested_value: str (optional)
             - message: str
@@ -48,11 +55,50 @@ class RuleValidator(ABC):
         """
         pass
 
+    def validate_chunked(self) -> List[Dict[str, Any]]:
+        """
+        Validate data in chunks for memory efficiency.
+        Override this in validators that can benefit from chunking.
+        """
+        # Default implementation processes in chunks
+        MemoryMonitor.log_memory_usage(f"before validation: {self.rule.name}")
+
+        all_issues = self.chunked_reader.process_in_chunks(
+            df=self.df,
+            processor_func=lambda chunk: self._validate_chunk(chunk),
+            combine_results=True
+        )
+
+        MemoryMonitor.log_memory_usage(f"after validation: {self.rule.name}")
+        return all_issues
+
+    def _validate_chunk(self, chunk: pd.DataFrame) -> List[Dict[str, Any]]:
+        """
+        Validate a single chunk. Override in subclasses for custom chunked validation.
+        Default: calls validate() on the chunk.
+        """
+        # Temporarily replace self.df with chunk
+        original_df = self.df
+        self.df = chunk
+        issues = self.validate()
+        self.df = original_df
+        return issues
+
 
 class MissingDataValidator(RuleValidator):
-    """Validator for missing data detection"""
+    """Validator for missing data detection with chunking support"""
 
     def validate(self) -> List[Dict[str, Any]]:
+        """Main validation entry point"""
+        # Use chunking for large DataFrames
+        if len(self.df) > 10000:
+            logger.info(f"Using chunked validation for large dataset ({len(self.df)} rows)")
+            return self.validate_chunked()
+        else:
+            return self._validate_full()
+
+    def _validate_full(self) -> List[Dict[str, Any]]:
+        """Original validation logic for small DataFrames"""
         issues = []
         target_columns = self.params.get('columns', [])
 
@@ -69,10 +115,10 @@ class MissingDataValidator(RuleValidator):
             if column not in self.df.columns:
                 print(f"Skipping column '{column}' - not found in dataset")
                 continue
-                
+
             null_mask = self.df[column].isnull()
             null_indices = self.df[null_mask].index.tolist()
-            
+
             for idx in null_indices:
                 issues.append({
                     'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
@@ -82,7 +128,7 @@ class MissingDataValidator(RuleValidator):
                     'message': f'Missing value in required field {column}',
                     'category': 'missing_data'
                 })
-        
+
         return issues
 
 
@@ -799,12 +845,16 @@ class RuleEngineService:
         try:
             # Load dataset data (this would need to be implemented based on how data is stored)
             # For now, assuming we have a method to load the dataset as DataFrame
+            MemoryMonitor.log_memory_usage("before loading dataset")
             df = self._load_dataset_as_dataframe(dataset_version)
+            MemoryMonitor.log_memory_usage("after loading dataset")
 
             execution.total_rows = len(df)
             all_issues = []
             successful_rules = 0
             failed_rules = 0
+
+            logger.info(f"Executing {len(rules)} rules on dataset with {len(df)} rows, {len(df.columns)} columns")
 
             # Execute each rule
             for rule in rules:
