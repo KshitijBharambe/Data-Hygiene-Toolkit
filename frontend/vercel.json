@@ -3,6 +3,15 @@
     {
       "source": "/api/((?!auth).*)",
       "destination": "https://api.kshitij.space/$1"
+    },
+    {
+      "$schema": "https://openapi.vercel.sh/vercel.json",
+      "git": {
+        "deploymentEnabled": {
+          "*": false,
+          "main": true
+        }
+      }
     }
   ]
 }
