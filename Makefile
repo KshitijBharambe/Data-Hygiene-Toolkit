@@ -44,7 +44,10 @@ prod-sim: prod-sim-build prod-sim-up ## Build and start production simulation en
 
 prod-sim-build: ## Build production simulation containers
 	@echo "$(GREEN)Building production simulation containers...$(NC)"
-	@docker-compose -f docker-compose.prod-sim.yml build
+	@if [ ! -f .env.prod-sim ]; then \
+		echo "$(YELLOW)Warning: .env.prod-sim not found, using defaults$(NC)"; \
+	fi
+	@docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim build
 	@echo "$(GREEN)✓ Build complete$(NC)"
 
 prod-sim-up: ## Start production simulation environment
