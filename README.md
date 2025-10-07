@@ -98,30 +98,30 @@ A comprehensive data quality validation and management platform for ensuring dat
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Frontend (Vercel)                     │
+│                        Frontend (Vercel)                    │
 │  Next.js 15 + TypeScript + Tailwind + shadcn/ui             │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          │ HTTPS/REST
                          │
 ┌────────────────────────▼────────────────────────────────────┐
-│                     Backend API (Fly.io)                     │
-│  FastAPI + Python 3.11 + SQLAlchemy                          │
-│                                                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Routes     │  │   Services   │  │    Models    │      │
-│  │  - Auth      │  │  - Rule Eng  │  │  - Dataset   │      │
-│  │  - Upload    │  │  - Data Imp  │  │  - Rule      │      │
-│  │  - Rules     │  │  - Versioning│  │  - Execution │      │
-│  │  - Execute   │  │  - Export    │  │  - Issue     │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                     Backend API (Fly.io)                    │
+│             FastAPI + Python 3.11 + SQLAlchemy              │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │   Routes     │  │   Services   │  │    Models    │       │
+│  │  - Auth      │  │  - Rule Eng  │  │  - Dataset   │       │
+│  │  - Upload    │  │  - Data Imp  │  │  - Rule      │       │
+│  │  - Rules     │  │  - Versioning│  │  - Execution │       │
+│  │  - Execute   │  │  - Export    │  │  - Issue     │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          │ SQL
                          │
 ┌────────────────────────▼────────────────────────────────────┐
-│                 Database (Supabase)                          │
-│  PostgreSQL 16 + Automatic Backups                           │
+│                 Database (Supabase)                         │
+│           PostgreSQL 16 + Automatic Backups                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
