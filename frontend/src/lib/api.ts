@@ -66,12 +66,8 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          this.token = null;
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("auth_token");
-          }
-        }
+        // Don't automatically clear token on 401 - let NextAuth handle session management
+        // The token will be re-synced by useAuthenticatedApi hook
         return Promise.reject(error);
       }
     );

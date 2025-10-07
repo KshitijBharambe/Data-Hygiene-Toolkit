@@ -45,34 +45,53 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_session)
 ) -> User:
+    import logging
+    logger = logging.getLogger(__name__)
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     token = credentials.credentials
+    logger.info(f"🔐 Verifying token (length: {len(token) if token else 0})")
+
     payload = verify_token(token)
     if payload is None:
+        logger.warning("❌ Token verification failed")
         raise credentials_exception
-    
+
     user_id: str = payload.get("sub")
     if user_id is None:
+        logger.warning("❌ No user_id in token payload")
         raise credentials_exception
-    
+
+    logger.info(f"✅ Token verified for user_id: {user_id}")
+
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
+        logger.warning(f"❌ User not found in database: {user_id}")
         raise credentials_exception
-    
+
+    logger.info(f"✅ User authenticated: {user.email} (role: {user.role.value})")
     return user
 
 def require_role(allowed_roles: list[UserRole]):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"🔒 Checking role: user={current_user.email}, role={current_user.role.value}, allowed={[r.value for r in allowed_roles]}")
+
         if current_user.role not in allowed_roles:
+            logger.warning(f"❌ Access denied: user role {current_user.role.value} not in {[r.value for r in allowed_roles]}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Insufficient permissions"
             )
+
+        logger.info(f"✅ Access granted for {current_user.email}")
         return current_user
     return role_checker
 

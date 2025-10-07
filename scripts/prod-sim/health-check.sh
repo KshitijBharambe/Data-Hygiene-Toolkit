@@ -60,14 +60,21 @@ check_container() {
     TOTAL=$((TOTAL + 1))
 
     if docker ps --filter "name=$container" --filter "status=running" | grep -q "$container"; then
-        local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
+        # Try to get health status, suppress errors (container may not have healthcheck)
+        local health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null)
 
-        if [ "$health" == "healthy" ] || [ "$health" == "unknown" ]; then
-            echo -e "$CHECK_MARK ${name}: ${GREEN}Running${NC} (health: $health)"
+        if [ "$health" == "healthy" ]; then
+            echo -e "$CHECK_MARK ${name}: ${GREEN}Running${NC} (healthy)"
+            HEALTHY=$((HEALTHY + 1))
+            return 0
+        elif [ "$health" == "none" ] || [ -z "$health" ]; then
+            # Container doesn't have a healthcheck configured - that's OK if it's running
+            echo -e "$CHECK_MARK ${name}: ${GREEN}Running${NC}"
             HEALTHY=$((HEALTHY + 1))
             return 0
         else
-            echo -e "$WARNING ${name}: ${YELLOW}Running but not healthy${NC} (health: $health)"
+            echo -e "$WARNING ${name}: ${YELLOW}Running but unhealthy${NC} (health: $health)"
+            UNHEALTHY=$((UNHEALTHY + 1))
             return 1
         fi
     else
@@ -80,17 +87,17 @@ check_container() {
 echo -e "${BLUE}Checking Supabase Services...${NC}"
 echo "───────────────────────────────────────────────────────────"
 
-check_container "PostgreSQL Database" "prodsim-supabase-db"
-check_container "Supabase Studio" "prodsim-supabase-studio"
-check_container "Kong API Gateway" "prodsim-supabase-kong"
-check_container "Auth Service" "prodsim-supabase-auth"
-check_container "REST API (PostgREST)" "prodsim-supabase-rest"
-check_container "Realtime Service" "prodsim-supabase-realtime"
-check_container "Storage Service" "prodsim-supabase-storage"
-check_container "Image Proxy" "prodsim-supabase-imgproxy"
-check_container "Database Meta" "prodsim-supabase-meta"
-check_container "Email Testing (Inbucket)" "prodsim-supabase-inbucket"
-check_container "pgBouncer Pooler" "prodsim-pgbouncer"
+# Supabase CLI creates containers with _API suffix (not prodsim-supabase- prefix)
+check_container "PostgreSQL Database" "supabase_db_API"
+check_container "Supabase Studio" "supabase_studio_API"
+check_container "Kong API Gateway" "supabase_kong_API"
+check_container "Auth Service" "supabase_auth_API"
+check_container "REST API (PostgREST)" "supabase_rest_API"
+check_container "Realtime Service" "supabase_realtime_API"
+check_container "Storage Service" "supabase_storage_API"
+check_container "Database Meta" "supabase_pg_meta_API"
+check_container "Email Testing (Inbucket)" "supabase_inbucket_API"
+check_container "pgBouncer Pooler" "supabase_pooler_API"
 
 echo ""
 echo -e "${BLUE}Checking Application Services...${NC}"
@@ -106,7 +113,8 @@ echo "────────────────────────�
 check_http "API Root" "http://localhost:8000/"
 check_http "API Docs" "http://localhost:8000/docs"
 check_http "Frontend" "http://localhost:3000/"
-check_http "Supabase Kong" "http://localhost:54321/"
+# Note: Kong returns 404 for /, which is expected - check REST endpoint instead
+check_http "Supabase REST" "http://localhost:54321/rest/v1/"
 check_http "Supabase Studio" "http://localhost:54323/"
 check_http "Inbucket" "http://localhost:54324/"
 

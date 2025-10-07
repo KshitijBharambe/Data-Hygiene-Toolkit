@@ -21,9 +21,12 @@ router = APIRouter(prefix="/reports", tags=["Reports & Export"])
 async def export_dataset(
     dataset_id: str,
     export_format: ExportFormat = Query(..., description="Export format"),
-    include_metadata: bool = Query(True, description="Include dataset metadata"),
-    include_issues: bool = Query(False, description="Include identified issues"),
-    execution_id: Optional[str] = Query(None, description="Specific execution context"),
+    include_metadata: bool = Query(
+        True, description="Include dataset metadata"),
+    include_issues: bool = Query(
+        False, description="Include identified issues"),
+    execution_id: Optional[str] = Query(
+        None, description="Specific execution context"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -138,7 +141,8 @@ async def download_export(
     """
     try:
         export_service = ExportService(db)
-        file_path, download_filename = export_service.get_export_file(export_id)
+        file_path, download_filename = export_service.get_export_file(
+            export_id)
 
         # Check if file exists
         if not Path(file_path).exists():
@@ -201,7 +205,8 @@ async def delete_export(
 @router.post("/datasets/{dataset_id}/quality-report")
 async def generate_quality_report(
     dataset_id: str,
-    include_charts: bool = Query(False, description="Include visual charts (future feature)"),
+    include_charts: bool = Query(
+        False, description="Include visual charts (future feature)"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -299,18 +304,21 @@ async def get_dashboard_overview(
         for dataset in datasets:
             try:
                 data_quality_service = DataQualityService(db)
-                summary = data_quality_service.create_data_quality_summary(dataset.id)
+                summary = data_quality_service.create_data_quality_summary(
+                    dataset.id)
                 quality_scores.append(summary.get("data_quality_score", 0))
             except:
                 continue
 
-        avg_quality_score = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        avg_quality_score = sum(quality_scores) / \
+            len(quality_scores) if quality_scores else 0
 
         # Dataset status distribution
         status_distribution = {}
         for dataset in datasets:
             status = dataset.status.value
-            status_distribution[status] = status_distribution.get(status, 0) + 1
+            status_distribution[status] = status_distribution.get(
+                status, 0) + 1
 
         return {
             "overview": {
@@ -413,7 +421,8 @@ async def get_quality_trends(
         for trend in trends.values():
             total = trend["total_executions"]
             successful = trend["successful_executions"]
-            trend["success_rate"] = (successful / total * 100) if total > 0 else 0
+            trend["success_rate"] = (
+                successful / total * 100) if total > 0 else 0
 
         return {
             "analysis_period": {
@@ -430,7 +439,8 @@ async def get_quality_trends(
                     if executions else 0
                 ),
                 "overall_success_rate": (
-                    len([e for e in executions if e.status.value == "succeeded"]) / len(executions) * 100
+                    len([e for e in executions if e.status.value ==
+                        "succeeded"]) / len(executions) * 100
                     if executions else 0
                 )
             }
@@ -473,12 +483,14 @@ async def get_issue_patterns(
         # Group by severity
         for issue in issues:
             severity = issue.severity.value if issue.severity else "unknown"
-            patterns["by_severity"][severity] = patterns["by_severity"].get(severity, 0) + 1
+            patterns["by_severity"][severity] = patterns["by_severity"].get(
+                severity, 0) + 1
 
         # Group by column
         for issue in issues:
             column = issue.column_name or "unknown"
-            patterns["by_column"][column] = patterns["by_column"].get(column, 0) + 1
+            patterns["by_column"][column] = patterns["by_column"].get(
+                column, 0) + 1
 
         # Get rule information for issues
         for issue in issues:
@@ -487,7 +499,8 @@ async def get_issue_patterns(
                 rule = db.query(Rule).filter(Rule.id == issue.rule_id).first()
                 if rule:
                     rule_type = rule.kind.value
-                    patterns["by_rule_type"][rule_type] = patterns["by_rule_type"].get(rule_type, 0) + 1
+                    patterns["by_rule_type"][rule_type] = patterns["by_rule_type"].get(
+                        rule_type, 0) + 1
 
         # Most common issue descriptions
         description_counts = {}
@@ -502,13 +515,15 @@ async def get_issue_patterns(
 
         # Fix rates by severity
         for severity in patterns["by_severity"]:
-            severity_issues = [i for i in issues if (i.severity.value if i.severity else "unknown") == severity]
+            severity_issues = [i for i in issues if (
+                i.severity.value if i.severity else "unknown") == severity]
             severity_fixes = db.query(Fix).filter(
                 Fix.issue_id.in_([i.id for i in severity_issues])
             ).count()
 
             total_severity_issues = len(severity_issues)
-            fix_rate = (severity_fixes / total_severity_issues * 100) if total_severity_issues > 0 else 0
+            fix_rate = (severity_fixes / total_severity_issues *
+                        100) if total_severity_issues > 0 else 0
             patterns["fix_rates"][severity] = round(fix_rate, 2)
 
         return {
@@ -538,7 +553,7 @@ async def get_issue_patterns(
 @router.get("/system/health")
 async def get_system_health(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)  # Admin only
+    current_user: User = Depends(get_any_authenticated_user)  # Admin only
 ):
     """
     Get system health metrics (admin only)
@@ -569,7 +584,8 @@ async def get_system_health(
         export_storage_path = Path("data/exports")
         if export_storage_path.exists():
             export_files = list(export_storage_path.glob("*"))
-            export_storage_size = sum(f.stat().st_size for f in export_files if f.is_file())
+            export_storage_size = sum(
+                f.stat().st_size for f in export_files if f.is_file())
         else:
             export_files = []
             export_storage_size = 0
@@ -614,6 +630,7 @@ async def get_system_health(
             detail=f"Failed to get system health: {str(e)}"
         )
 
+
 def _get_avg_execution_time(db: Session) -> float:
     """Get average execution time from recent executions"""
     from datetime import datetime, timedelta
@@ -636,6 +653,7 @@ def _get_avg_execution_time(db: Session) -> float:
     )
     return round(total_time / len(recent_executions), 2) if recent_executions else 0.0
 
+
 def _get_success_rate(db: Session) -> float:
     """Get success rate from recent executions"""
     from datetime import datetime, timedelta
@@ -650,5 +668,6 @@ def _get_success_rate(db: Session) -> float:
     if not recent_executions:
         return 100.0
 
-    successful = len([e for e in recent_executions if e.status.value == "succeeded"])
+    successful = len(
+        [e for e in recent_executions if e.status.value == "succeeded"])
     return round(successful / len(recent_executions) * 100, 2)

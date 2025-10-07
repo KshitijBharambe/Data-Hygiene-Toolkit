@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from app.database import get_session
 from app.models import Issue, Fix, Rule, Execution, Dataset, DatasetVersion, User, Criticality
-from app.auth import get_any_authenticated_user
+from app.auth import get_any_authenticated_user, get_admin_user
 from app.schemas import IssueResponse, FixCreate, FixResponse
 
 router = APIRouter(prefix="/issues", tags=["Issues & Fixes"])

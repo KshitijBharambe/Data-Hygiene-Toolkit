@@ -2,296 +2,12 @@
 # This docker-compose file simulates the production stack:
 # - Frontend: Vercel (Next.js standalone build)
 # - Backend: Fly.io (with memory/CPU constraints)
-# - Database: Supabase (PostgreSQL 16 + Auth + Storage)
+# - Database: Supabase (managed via Supabase CLI - run `npx supabase start`)
+
+# NOTE: Start Supabase first with: npx supabase start
+# Then run: docker-compose -f docker-compose.prod-sim.yml up -d
 
 services:
-  # ============================================================================
-  # SUPABASE SERVICES (Database Layer)
-  # ============================================================================
-
-  # PostgreSQL 16 - Matching production Supabase database
-  db:
-    image: supabase/postgres:16.6.0.73
-    container_name: prodsim-supabase-db
-    restart: unless-stopped
-    ports:
-      - "54322:5432"
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: postgres
-      POSTGRES_PORT: 5432
-    volumes:
-      - supabase-db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - prodsim-network
-
-  # Supabase Studio - Web UI for database management
-  studio:
-    image: supabase/studio:20250105-91d2527
-    container_name: prodsim-supabase-studio
-    restart: unless-stopped
-    ports:
-      - "54323:3000"
-    environment:
-      STUDIO_PG_META_URL: http://meta:8080
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION:-Data Hygiene Toolkit}
-      DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT:-Production Simulation}
-      SUPABASE_URL: http://kong:8000
-      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL:-http://localhost:54321}
-      SUPABASE_ANON_KEY: ${ANON_KEY}
-      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
-    depends_on:
-      meta:
-        condition: service_healthy
-    networks:
-      - prodsim-network
-
-  # Kong - API Gateway (routes to PostgREST, Auth, Storage, etc.)
-  kong:
-    image: kong:2.8.1
-    container_name: prodsim-supabase-kong
-    restart: unless-stopped
-    ports:
-      - "54321:8000"
-      - "54444:8443"
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,acl,basic-auth
-      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
-      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-    volumes:
-      - ./supabase/kong.yml:/var/lib/kong/kong.yml:ro
-    depends_on:
-      - auth
-      - rest
-      - storage
-    networks:
-      - prodsim-network
-
-  # Auth - Supabase GoTrue authentication service
-  auth:
-    image: supabase/gotrue:v2.175.0
-    container_name: prodsim-supabase-auth
-    restart: unless-stopped
-    environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:54321}
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
-      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
-      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
-      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
-      GOTRUE_JWT_ADMIN_ROLES: service_role
-      GOTRUE_JWT_AUD: authenticated
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
-      GOTRUE_JWT_EXP: ${JWT_EXPIRY:-3600}
-      GOTRUE_JWT_SECRET: ${JWT_SECRET}
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: ${ENABLE_EMAIL_SIGNUP:-true}
-      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: ${ENABLE_ANONYMOUS_SIGN_INS:-false}
-      GOTRUE_MAILER_AUTOCONFIRM: ${MAILER_AUTOCONFIRM:-true}
-      GOTRUE_SMTP_HOST: ${SMTP_HOST:-inbucket}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT:-2500}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-admin@email.com}
-      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-Admin}
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # REST - PostgREST API for database access
-  rest:
-    image: postgrest/postgrest:v12.2.3
-    container_name: prodsim-supabase-rest
-    restart: unless-stopped
-    environment:
-      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
-      PGRST_DB_SCHEMAS: ${PGRST_DB_SCHEMAS:-public,storage,graphql_public}
-      PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET}
-      PGRST_DB_USE_LEGACY_GUCS: "false"
-      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
-      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY:-3600}
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - prodsim-network
-
-  # Realtime - WebSocket server for real-time updates
-  realtime:
-    image: supabase/realtime:v2.33.66
-    container_name: prodsim-supabase-realtime
-    restart: unless-stopped
-    environment:
-      PORT: 4000
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: supabase_admin
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DB_NAME: postgres
-      DB_AFTER_CONNECT_QUERY: 'SET search_path TO _realtime'
-      DB_ENC_KEY: supabaserealtime
-      API_JWT_SECRET: ${JWT_SECRET}
-      FLY_ALLOC_ID: fly123
-      FLY_APP_NAME: realtime
-      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
-      ERL_AFLAGS: -proto_dist inet_tcp
-      ENABLE_TAILSCALE: "false"
-      DNS_NODES: "''"
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "bash", "-c", "printf \\0 > /dev/tcp/localhost/4000"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # Storage - Supabase Storage API
-  storage:
-    image: supabase/storage-api:v1.15.0
-    container_name: prodsim-supabase-storage
-    restart: unless-stopped
-    environment:
-      ANON_KEY: ${ANON_KEY}
-      SERVICE_KEY: ${SERVICE_ROLE_KEY}
-      POSTGREST_URL: http://rest:3000
-      PGRST_JWT_SECRET: ${JWT_SECRET}
-      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
-      FILE_SIZE_LIMIT: 52428800
-      STORAGE_BACKEND: file
-      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      TENANT_ID: stub
-      REGION: stub
-      GLOBAL_S3_BUCKET: stub
-      ENABLE_IMAGE_TRANSFORMATION: "true"
-      IMGPROXY_URL: http://imgproxy:5001
-    volumes:
-      - supabase-storage-data:/var/lib/storage
-    depends_on:
-      db:
-        condition: service_healthy
-      rest:
-        condition: service_started
-      imgproxy:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # Image Proxy - Image transformation service
-  imgproxy:
-    image: darthsim/imgproxy:v3.8.0
-    container_name: prodsim-supabase-imgproxy
-    restart: unless-stopped
-    environment:
-      IMGPROXY_BIND: ":5001"
-      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
-      IMGPROXY_USE_ETAG: "true"
-      IMGPROXY_ENABLE_WEBP_DETECTION: ${IMGPROXY_ENABLE_WEBP_DETECTION:-true}
-    volumes:
-      - supabase-storage-data:/var/lib/storage
-    healthcheck:
-      test: ["CMD", "imgproxy", "health"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # Meta - Database metadata service
-  meta:
-    image: supabase/postgres-meta:v0.84.2
-    container_name: prodsim-supabase-meta
-    restart: unless-stopped
-    environment:
-      PG_META_PORT: 8080
-      PG_META_DB_HOST: db
-      PG_META_DB_PORT: 5432
-      PG_META_DB_NAME: postgres
-      PG_META_DB_USER: supabase
-      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # Inbucket - Email testing server
-  inbucket:
-    image: inbucket/inbucket:3.0.3
-    container_name: prodsim-supabase-inbucket
-    restart: unless-stopped
-    ports:
-      - "54324:9000"
-    environment:
-      INBUCKET_WEB_ADDR: 0.0.0.0:9000
-      INBUCKET_POP3_ADDR: 0.0.0.0:9110
-      INBUCKET_SMTP_ADDR: 0.0.0.0:9025
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/monitor/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 3
-    networks:
-      - prodsim-network
-
-  # pgBouncer - Connection pooler (simulating Supabase Pooler)
-  pgbouncer:
-    image: bitnami/pgbouncer:1.22.1
-    container_name: prodsim-pgbouncer
-    restart: unless-stopped
-    ports:
-      - "54329:6432"
-    environment:
-      POSTGRESQL_HOST: db
-      POSTGRESQL_PORT: 5432
-      POSTGRESQL_DATABASE: postgres
-      POSTGRESQL_USERNAME: postgres
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      PGBOUNCER_PORT: 6432
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_DEFAULT_POOL_SIZE: 15
-      PGBOUNCER_MAX_CLIENT_CONN: 200
-      PGBOUNCER_SERVER_IDLE_TIMEOUT: 30
-      PGBOUNCER_SERVER_LIFETIME: 3600
-      PGBOUNCER_SERVER_CONNECT_TIMEOUT: 15
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - prodsim-network
-
   # ============================================================================
   # APPLICATION SERVICES (Fly.io + Vercel Simulation)
   # ============================================================================
@@ -306,32 +22,28 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Database connection via pgBouncer (matching production)
-      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/postgres
-      ASYNC_DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/postgres
+      # Database connection to Supabase CLI stack (use host.docker.internal on Mac/Windows)
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@host.docker.internal:54322/postgres
+      ASYNC_DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:54322/postgres
 
       # API Settings
       PORT: 8000
       PYTHONPATH: /api
 
-      # Optional: Add other production env vars
+      # Security
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:54321}
+
+      # Environment
+      ENVIRONMENT: local-prod-sim
     volumes:
       - api-data:/api/data
-    depends_on:
-      db:
-        condition: service_healthy
-      pgbouncer:
-        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - prodsim-network
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     # Fly.io VM constraints (256MB RAM, 1 shared CPU)
     deploy:
       resources:
@@ -341,37 +53,43 @@ services:
         reservations:
           cpus: '0.5'
           memory: 128M
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # Frontend - Simulating Vercel deployment
   frontend:
     build:
       context: ./frontend
       dockerfile: ../Dockerfile.frontend
+      args:
+        # Build-time arguments that get baked into the client bundle
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
     container_name: prodsim-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      # Next.js environment variables
+      # Runtime environment variables (for server-side)
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_API_URL: http://api:8000  # Docker internal network URL for server-side calls
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-nextauth-secret}
       NODE_ENV: production
 
-      # Supabase connection
+      # Supabase connection (Supabase CLI stack)
       NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "node -e \"const http = require('http'); http.get('http://localhost:3000', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 15s
       timeout: 10s
       retries: 3
       start_period: 30s
-    networks:
-      - prodsim-network
     # Vercel-like constraints
     deploy:
       resources:
@@ -380,18 +98,36 @@ services:
           memory: 512M
 
 # ============================================================================
-# NETWORKS & VOLUMES
+# VOLUMES
 # ============================================================================
 
-networks:
-  prodsim-network:
-    driver: bridge
-    name: prodsim-network
-
 volumes:
-  supabase-db-data:
-    name: prodsim-supabase-db-data
-  supabase-storage-data:
-    name: prodsim-supabase-storage-data
   api-data:
     name: prodsim-api-data
+
+# ============================================================================
+# NOTES
+# ============================================================================
+#
+# Supabase Services (DB, Auth, Storage, Realtime, etc.):
+#   Managed by Supabase CLI. Start with: npx supabase start
+#   Stop with: npx supabase stop
+#   Status: npx supabase status
+#
+# URLs when running:
+#   - API: http://localhost:8000
+#   - Frontend: http://localhost:3000
+#   - Supabase API: http://localhost:54321
+#   - Supabase Studio: http://localhost:54323
+#   - Supabase DB: postgresql://postgres:postgres@localhost:54322/postgres
+#   - Mailpit (emails): http://localhost:54324
+#
+# To run:
+#   1. npx supabase start
+#   2. docker-compose -f docker-compose.prod-sim.yml up -d
+#
+# To stop:
+#   1. docker-compose -f docker-compose.prod-sim.yml down
+#   2. npx supabase stop
+#
+# ============================================================================
