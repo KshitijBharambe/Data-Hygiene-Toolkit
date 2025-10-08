@@ -53,7 +53,10 @@ async def create_rule_version(
     
     # Find the root rule ID (for tracking all versions of a rule)
     root_rule_id = original_rule.parent_rule_id if original_rule.parent_rule_id else original_rule.id
-    
+
+    # Get rule family ID (prefer rule_family_id, fallback to root_rule_id)
+    family_id = original_rule.rule_family_id if original_rule.rule_family_id else root_rule_id
+
     # Create new version
     new_version = Rule(
         name=update_data.get('name', original_rule.name),
@@ -62,19 +65,20 @@ async def create_rule_version(
         criticality=update_data.get('criticality', original_rule.criticality),
         target_table=update_data.get('target_table', original_rule.target_table),
         target_columns=(
-            json.dumps(update_data['target_columns']) 
-            if 'target_columns' in update_data 
+            json.dumps(update_data['target_columns'])
+            if 'target_columns' in update_data
             else original_rule.target_columns
         ),
         params=(
-            json.dumps(update_data['params']) 
-            if 'params' in update_data 
+            json.dumps(update_data['params'])
+            if 'params' in update_data
             else original_rule.params
         ),
         created_by=current_user.id,
         is_active=update_data.get('is_active', original_rule.is_active),
         version=original_rule.version + 1,
         parent_rule_id=root_rule_id,  # Always point to root
+        rule_family_id=family_id,  # Denormalized family ID for faster queries
         is_latest=True,
         change_log=json.dumps({
             'changed_by': str(current_user.id),
@@ -134,6 +138,148 @@ def get_rule_root_id(rule: Rule) -> str:
 def has_rule_been_used(rule_id: str, db: Session) -> bool:
     """Check if a rule has been used in any executions"""
     from app.models import ExecutionRule
-    
+
     count = db.query(ExecutionRule).filter_by(rule_id=rule_id).count()
     return count > 0
+
+
+def create_rule_snapshot(rule: Rule) -> str:
+    """
+    Create a JSON snapshot of a rule for storage in execution records
+
+    Args:
+        rule: Rule object to snapshot
+
+    Returns:
+        JSON string containing complete rule details
+    """
+    snapshot = {
+        'id': rule.id,
+        'name': rule.name,
+        'description': rule.description,
+        'kind': rule.kind.value if hasattr(rule.kind, 'value') else str(rule.kind),
+        'criticality': rule.criticality.value if hasattr(rule.criticality, 'value') else str(rule.criticality),
+        'target_columns': rule.target_columns,
+        'params': rule.params,
+        'version': rule.version,
+        'is_active': rule.is_active,
+        'rule_family_id': rule.rule_family_id,
+        'created_by': rule.created_by,
+        'created_at': rule.created_at.isoformat() if rule.created_at else None
+    }
+    return json.dumps(snapshot)
+
+
+def create_lightweight_rule_snapshot(rule: Rule) -> str:
+    """
+    Create a lightweight JSON snapshot of a rule for issues
+
+    Args:
+        rule: Rule object to snapshot
+
+    Returns:
+        JSON string containing basic rule info
+    """
+    snapshot = {
+        'id': rule.id,
+        'name': rule.name,
+        'kind': rule.kind.value if hasattr(rule.kind, 'value') else str(rule.kind),
+        'version': rule.version,
+        'criticality': rule.criticality.value if hasattr(rule.criticality, 'value') else str(rule.criticality)
+    }
+    return json.dumps(snapshot)
+
+
+def get_latest_version_by_family(rule_family_id: str, db: Session) -> Rule:
+    """
+    Get the latest version of a rule family
+
+    Args:
+        rule_family_id: The root rule ID for the family
+        db: Database session
+
+    Returns:
+        The latest version of the rule, or None if not found
+    """
+    return db.query(Rule).filter(
+        Rule.rule_family_id == rule_family_id,
+        Rule.is_latest == True
+    ).first()
+
+
+def get_latest_version_by_name(rule_name: str, db: Session) -> Rule:
+    """
+    Get the latest version of a rule by its name
+
+    Args:
+        rule_name: Name of the rule
+        db: Database session
+
+    Returns:
+        The latest version of the rule, or None if not found
+    """
+    return db.query(Rule).filter(
+        Rule.name == rule_name,
+        Rule.is_latest == True
+    ).first()
+
+
+def promote_previous_version_to_latest(rule_id: str, db: Session) -> bool:
+    """
+    When deleting the latest version, promote the previous version to latest
+
+    Args:
+        rule_id: ID of the rule being deleted (must be is_latest=True)
+        db: Database session
+
+    Returns:
+        True if a previous version was promoted, False otherwise
+    """
+    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    if not rule or not rule.is_latest:
+        return False
+
+    # Find the previous version (highest version number that's less than current)
+    rule_family_id = rule.rule_family_id if rule.rule_family_id else rule.id
+
+    previous_version = db.query(Rule).filter(
+        Rule.rule_family_id == rule_family_id,
+        Rule.version < rule.version,
+        Rule.id != rule_id
+    ).order_by(Rule.version.desc()).first()
+
+    # If no previous version via family_id, try parent_rule_id approach (fallback)
+    if not previous_version:
+        root_rule_id = get_rule_root_id(rule)
+        previous_version = db.query(Rule).filter(
+            ((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)),
+            Rule.version < rule.version,
+            Rule.id != rule_id
+        ).order_by(Rule.version.desc()).first()
+
+    if previous_version:
+        previous_version.is_latest = True
+        db.commit()
+        return True
+
+    return False
+
+
+def get_rule_family_id(rule: Rule) -> str:
+    """
+    Get the rule family ID for a rule
+
+    Args:
+        rule: Rule object
+
+    Returns:
+        The rule family ID (root rule ID)
+    """
+    if rule.rule_family_id:
+        return rule.rule_family_id
+    elif rule.parent_rule_id:
+        # Fallback: use parent_rule_id logic
+        return get_rule_root_id(rule)
+    else:
+        # This is the root rule itself
+        return rule.id

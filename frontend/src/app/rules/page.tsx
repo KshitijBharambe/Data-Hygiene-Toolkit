@@ -31,7 +31,8 @@ import {
   Trash2,
   Shield,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  History
 } from 'lucide-react'
 import Link from 'next/link'
 import { Rule, RuleKind, Criticality } from '@/types/api'
@@ -86,6 +87,12 @@ function RuleActionsDropdown({ rule }: { rule: Rule }) {
           <Link href={`/rules/${rule.id}`}>
             <Edit className="h-4 w-4 mr-2" />
             Edit
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={`/rules/${rule.id}/versions`}>
+            <History className="h-4 w-4 mr-2" />
+            View Versions
           </Link>
         </DropdownMenuItem>
         {rule.is_active ? (
@@ -253,6 +260,7 @@ export default function RulesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Version</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Criticality</TableHead>
                     <TableHead>Status</TableHead>
@@ -272,6 +280,11 @@ export default function RulesPage() {
                             </div>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">
+                          v{rule.version || 1}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">

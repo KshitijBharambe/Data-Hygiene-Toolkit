@@ -124,6 +124,7 @@ class RuleResponse(RuleBase):
     updated_at: datetime
     version: int
     parent_rule_id: Optional[str] = None
+    rule_family_id: Optional[str] = None
     is_latest: bool
     change_log: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
@@ -167,6 +168,8 @@ class IssueResponse(IssueBase):
     id: str
     execution_id: str
     rule_id: str
+    rule_name: Optional[str] = None
+    rule_snapshot: Optional[str] = None
     created_at: datetime
     resolved: bool
     model_config = ConfigDict(from_attributes=True)

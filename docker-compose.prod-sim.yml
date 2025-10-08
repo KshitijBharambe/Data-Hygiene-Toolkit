@@ -38,6 +38,11 @@ services:
       ENVIRONMENT: local-prod-sim
     volumes:
       - api-data:/api/data
+      # Hot reload: Mount source code for live updates
+      - ./api/app:/api/app:ro
+      - ./api/migrations:/api/migrations:ro
+    # Override CMD to enable hot reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips='*'
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/')\" || exit 1"]
       interval: 10s
@@ -56,16 +61,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # Frontend - Simulating Vercel deployment
+  # Frontend - Simulating Vercel deployment with hot reload
   frontend:
     build:
-      context: ./frontend
-      dockerfile: ../Dockerfile.frontend
-      args:
-        # Build-time arguments that get baked into the client bundle
-        NEXT_PUBLIC_API_URL: http://localhost:8000
-        NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+      context: .
+      dockerfile: Dockerfile.frontend.dev
     container_name: prodsim-frontend
     restart: unless-stopped
     ports:
@@ -76,11 +76,21 @@ services:
       INTERNAL_API_URL: http://api:8000  # Docker internal network URL for server-side calls
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-nextauth-secret}
-      NODE_ENV: production
+      NODE_ENV: development
 
       # Supabase connection (Supabase CLI stack)
       NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+    volumes:
+      # Hot reload: Mount source code for live updates
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./frontend/tailwind.config.ts:/app/tailwind.config.ts
+      # Don't mount node_modules (use container's version)
+      - /app/node_modules
+      - /app/.next
     depends_on:
       api:
         condition: service_healthy
@@ -94,8 +104,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '2.0'
+          memory: 1G
 
 # ============================================================================
 # VOLUMES
@@ -129,5 +139,14 @@ volumes:
 # To stop:
 #   1. docker-compose -f docker-compose.prod-sim.yml down
 #   2. npx supabase stop
+#
+# Hot Reload:
+#   Both backend and frontend have hot reload enabled:
+#   - Backend: Edit files in api/app/ and uvicorn will auto-reload
+#   - Frontend: Edit files in frontend/src/ and Next.js will auto-refresh
+#   - Changes appear within 1-2 seconds
+#
+# To rebuild after dependency changes:
+#   docker-compose -f docker-compose.prod-sim.yml up -d --build
 #
 # ============================================================================

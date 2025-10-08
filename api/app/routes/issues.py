@@ -61,6 +61,7 @@ async def get_issues(
                 "execution_id": issue.execution_id,
                 "rule_id": issue.rule_id,
                 "rule_name": issue.rule.name if issue.rule else None,
+                "rule_snapshot": issue.rule_snapshot,
                 "row_index": issue.row_index,
                 "column_name": issue.column_name,
                 "current_value": issue.current_value,

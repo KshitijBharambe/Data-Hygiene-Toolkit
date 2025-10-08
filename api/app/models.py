@@ -130,7 +130,7 @@ class DatasetColumn(Base):
 
 class Rule(Base):
     __tablename__ = "rules"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String, nullable=False, index=True)  # Removed unique constraint for versioning
     description = Column(Text)
@@ -143,12 +143,13 @@ class Rule(Base):
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    
+
     # Versioning fields
     version = Column(Integer, default=1, nullable=False)
     parent_rule_id = Column(String, ForeignKey("rules.id"), nullable=True)
     is_latest = Column(Boolean, default=True, nullable=False, index=True)
     change_log = Column(Text, nullable=True)  # JSON string of changes
+    rule_family_id = Column(String, ForeignKey("rules.id"), nullable=True, index=True)  # Denormalized root rule ID for faster queries
     
     # Relationships
     creator = relationship("User", back_populates="created_rules")
@@ -192,10 +193,11 @@ class Execution(Base):
 
 class ExecutionRule(Base):
     __tablename__ = "execution_rules"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
-    rule_id = Column(String, ForeignKey("rules.id"), nullable=False)
+    rule_id = Column(String, ForeignKey("rules.id", ondelete="SET NULL"), nullable=True)  # Nullable to allow rule deletion
+    rule_snapshot = Column(Text, nullable=True)  # JSON snapshot of rule at execution time
     error_count = Column(Integer, default=0)
     rows_flagged = Column(Integer, default=0)
     cols_flagged = Column(Integer, default=0)
@@ -207,10 +209,11 @@ class ExecutionRule(Base):
 
 class Issue(Base):
     __tablename__ = "issues"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
-    rule_id = Column(String, ForeignKey("rules.id"), nullable=False)
+    rule_id = Column(String, ForeignKey("rules.id", ondelete="SET NULL"), nullable=True)  # Nullable to allow rule deletion
+    rule_snapshot = Column(Text, nullable=True)  # Lightweight JSON snapshot of rule info
     row_index = Column(Integer, nullable=False)
     column_name = Column(String, nullable=False)
     current_value = Column(Text)

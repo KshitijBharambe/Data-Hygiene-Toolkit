@@ -111,3 +111,14 @@ export function useDeactivateRule() {
     },
   })
 }
+
+export function useRuleVersions(ruleId: string) {
+  const { isAuthenticated, hasToken } = useAuthenticatedApi()
+
+  return useQuery<Rule[]>({
+    queryKey: ['rule-versions', ruleId],
+    queryFn: () => apiClient.getRuleVersions(ruleId),
+    enabled: isAuthenticated && hasToken && !!ruleId,
+    staleTime: 60000,
+  })
+}

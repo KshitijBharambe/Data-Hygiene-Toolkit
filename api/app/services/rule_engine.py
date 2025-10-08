@@ -13,6 +13,7 @@ from app.models import (
     DatasetVersion, User, Criticality, ExecutionStatus
 )
 from app.utils import ChunkedDataFrameReader, MemoryMonitor
+from app.services.rule_versioning import create_rule_snapshot, create_lightweight_rule_snapshot
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -771,7 +772,7 @@ class RuleEngineService:
         return self.db.query(Rule).filter(Rule.id == rule_id).first()
     
     def create_rule(
-        self, 
+        self,
         name: str,
         description: str,
         kind: RuleKind,
@@ -781,15 +782,20 @@ class RuleEngineService:
         current_user: User
     ) -> Rule:
         """Create a new business rule"""
-        
-        # Check if rule name already exists
-        existing_rule = self.db.query(Rule).filter(Rule.name == name).first()
-        if existing_rule:
+
+        # Check if an active rule with same name already exists (is_latest=True)
+        # This allows historical versions to keep the same name
+        existing_latest_rule = self.db.query(Rule).filter(
+            Rule.name == name,
+            Rule.is_latest == True
+        ).first()
+
+        if existing_latest_rule:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Rule with name '{name}' already exists"
+                detail=f"An active rule with name '{name}' already exists"
             )
-        
+
         rule = Rule(
             name=name,
             description=description,
@@ -798,13 +804,20 @@ class RuleEngineService:
             target_columns=json.dumps(target_columns),
             params=json.dumps(params),
             created_by=current_user.id,
-            is_active=True
+            is_active=True,
+            version=1,
+            is_latest=True
         )
-        
+
         self.db.add(rule)
         self.db.commit()
         self.db.refresh(rule)
-        
+
+        # Set rule_family_id to self for new rules (version 1)
+        rule.rule_family_id = rule.id
+        self.db.commit()
+        self.db.refresh(rule)
+
         return rule
     
     def execute_rules_on_dataset(
@@ -858,9 +871,13 @@ class RuleEngineService:
 
             # Execute each rule
             for rule in rules:
+                # Create snapshot of the rule for this execution
+                rule_snapshot = create_rule_snapshot(rule)
+
                 execution_rule = ExecutionRule(
                     execution_id=execution.id,
-                    rule_id=rule.id
+                    rule_id=rule.id,
+                    rule_snapshot=rule_snapshot  # Store complete rule snapshot
                 )
                 self.db.add(execution_rule)
 
@@ -921,6 +938,9 @@ class RuleEngineService:
 
                     # Create issue records with validation
                     rule_issues = []
+                    # Create lightweight snapshot for issues (we already have it in ExecutionRule)
+                    lightweight_snapshot = create_lightweight_rule_snapshot(rule)
+
                     for issue_data in issues:
                         try:
                             # Validate required fields
@@ -930,6 +950,7 @@ class RuleEngineService:
                             issue = Issue(
                                 execution_id=execution.id,
                                 rule_id=rule.id,
+                                rule_snapshot=lightweight_snapshot,  # Store lightweight rule snapshot
                                 row_index=issue_data['row_index'],
                                 column_name=issue_data['column_name'],
                                 current_value=issue_data.get('current_value'),

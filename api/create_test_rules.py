@@ -174,10 +174,14 @@ def create_test_rules():
         # Create rules in database
         created_rules = []
         for rule_data in test_rules:
-            # Check if rule already exists
-            existing_rule = db.query(Rule).filter(Rule.name == rule_data["name"]).first()
-            if existing_rule:
-                print(f"Rule '{rule_data['name']}' already exists, skipping...")
+            # Check if an active (latest) rule with same name already exists
+            existing_latest_rule = db.query(Rule).filter(
+                Rule.name == rule_data["name"],
+                Rule.is_latest == True
+            ).first()
+
+            if existing_latest_rule:
+                print(f"Rule '{rule_data['name']}' already exists (latest version), skipping...")
                 continue
 
             rule = Rule(
@@ -188,10 +192,17 @@ def create_test_rules():
                 target_columns=json.dumps(rule_data["target_columns"]),
                 params=json.dumps(rule_data["params"]),
                 created_by=user.id,
-                is_active=True
+                is_active=True,
+                version=1,
+                is_latest=True
             )
 
             db.add(rule)
+            db.flush()  # Get the ID before setting rule_family_id
+
+            # Set rule_family_id to self for new rules (version 1)
+            rule.rule_family_id = rule.id
+
             created_rules.append(rule_data["name"])
 
         db.commit()

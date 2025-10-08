@@ -308,6 +308,7 @@ async def get_execution_summary(
         "rule_performance": [
             {
                 "rule_id": er.rule_id,
+                "rule_snapshot": er.rule_snapshot,
                 "error_count": er.error_count,
                 "rows_flagged": er.rows_flagged,
                 "cols_flagged": er.cols_flagged,

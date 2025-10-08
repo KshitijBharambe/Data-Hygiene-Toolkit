@@ -288,6 +288,11 @@ class ApiClient {
     await this.client.patch(`/rules/${id}/deactivate`);
   }
 
+  async getRuleVersions(id: string): Promise<Rule[]> {
+    const response = await this.client.get<Rule[]>(`/rules/${id}/versions`);
+    return response.data;
+  }
+
   // Execution endpoints
   async getExecutions(
     page: number = 1,
@@ -326,16 +331,25 @@ class ApiClient {
   async getIssues(
     executionId?: string,
     page: number = 1,
-    size: number = 20
+    size: number = 1000
   ): Promise<PaginatedResponse<Issue>> {
-    const params: Record<string, unknown> = { page, size };
+    const params: Record<string, unknown> = { limit: size, offset: (page - 1) * size };
     if (executionId) params.execution_id = executionId;
 
-    const response = await this.client.get<PaginatedResponse<Issue>>(
+    const response = await this.client.get<Issue[]>(
       "/issues",
       { params }
     );
-    return response.data;
+
+    // Convert array response to paginated format
+    const issues = Array.isArray(response.data) ? response.data : [];
+    return {
+      items: issues,
+      total: issues.length,
+      page: page,
+      size: size,
+      pages: 1,
+    };
   }
 
   async getIssue(id: string): Promise<Issue> {

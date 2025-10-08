@@ -6,6 +6,7 @@ export interface Issue {
   id: string;
   execution_id: string;
   rule_id: string;
+  rule_snapshot?: string; // JSON snapshot of rule at execution time
   rule_name?: string;
   row_index: number;
   column_name: string;
