@@ -53,6 +53,7 @@ import {
 import Link from "next/link";
 import { ExecutionStatus, Criticality } from "@/types/api";
 import { format, formatDistanceToNow } from "date-fns";
+import { formatDateInTimezone, getUserTimezone } from "@/lib/utils/date";
 
 const statusColors: Record<ExecutionStatus, string> = {
   queued: "bg-gray-100 text-gray-800",
@@ -77,6 +78,22 @@ const severityColors: Record<Criticality, string> = {
   critical: "bg-red-100 text-red-800",
 };
 
+// Type for parsed rule data
+interface RuleSnapshotData {
+  name?: string;
+  version?: number;
+  criticality?: string;
+  is_active?: boolean;
+  kind?: string;
+  description?: string;
+  created_by?: string;
+  created_at?: string;
+  id?: string;
+  rule_family_id?: string;
+  target_columns?: unknown;
+  params?: unknown;
+}
+
 // Component to display detailed rule information in a dialog
 function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | undefined }) {
   if (!ruleSnapshot) {
@@ -100,10 +117,10 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
     );
   }
 
-  let ruleData: any;
+  let ruleData: RuleSnapshotData;
   try {
-    ruleData = JSON.parse(ruleSnapshot);
-  } catch (e) {
+    ruleData = JSON.parse(ruleSnapshot) as RuleSnapshotData;
+  } catch {
     return (
       <Dialog>
         <DialogTrigger asChild>
@@ -135,7 +152,7 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Shield className="h-5 w-5" />
-            {ruleData.name || 'Unknown Rule'}
+            {String(ruleData.name || 'Unknown Rule')}
           </DialogTitle>
           <DialogDescription>
             Rule snapshot at execution time
@@ -146,34 +163,34 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
           {/* Status Badges */}
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline" className="font-mono">
-              v{ruleData.version || 1}
+              v{String(ruleData.version || 1)}
             </Badge>
             <Badge className={severityColors[ruleData.criticality as Criticality]}>
-              {ruleData.criticality || 'N/A'}
+              {String(ruleData.criticality || 'N/A')}
             </Badge>
             <Badge variant={ruleData.is_active ? 'default' : 'secondary'}>
               {ruleData.is_active ? 'Active' : 'Inactive'}
             </Badge>
-            {ruleData.kind && (
+            {ruleData.kind ? (
               <Badge variant="outline">
-                {ruleData.kind}
+                {String(ruleData.kind)}
               </Badge>
-            )}
+            ) : null}
           </div>
 
           {/* Description */}
-          {ruleData.description && (
+          {ruleData.description ? (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">Description</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{ruleData.description}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{String(ruleData.description)}</p>
             </div>
-          )}
+          ) : null}
 
           {/* Metadata Grid */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium text-muted-foreground">Created By</p>
-              <p className="text-sm font-mono break-all">{ruleData.created_by || 'Unknown'}</p>
+              <p className="text-sm font-mono break-all">{String(ruleData.created_by || 'Unknown')}</p>
             </div>
 
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
@@ -187,17 +204,17 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
 
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium text-muted-foreground">Rule ID</p>
-              <p className="text-xs font-mono break-all">{ruleData.id || 'N/A'}</p>
+              <p className="text-xs font-mono break-all">{String(ruleData.id || 'N/A')}</p>
             </div>
 
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium text-muted-foreground">Family ID</p>
-              <p className="text-xs font-mono break-all">{ruleData.rule_family_id || 'N/A'}</p>
+              <p className="text-xs font-mono break-all">{String(ruleData.rule_family_id || 'N/A')}</p>
             </div>
           </div>
 
           {/* Target Columns */}
-          {ruleData.target_columns && (
+          {ruleData.target_columns ? (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">Target Columns</h3>
               <div className="bg-muted p-3 rounded-lg">
@@ -208,10 +225,10 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
                 </code>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Parameters */}
-          {ruleData.params && (
+          {ruleData.params ? (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">Parameters</h3>
               <div className="bg-muted p-4 rounded-lg overflow-x-auto">
@@ -222,7 +239,7 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
                 </pre>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Warning if rule might be deleted */}
           <div className="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
@@ -290,6 +307,8 @@ export default function ExecutionDetailPage() {
       </MainLayout>
     );
   }
+
+  const userTimezone = getUserTimezone();
 
   const duration = (() => {
     // Try to get duration from summary first
@@ -398,11 +417,11 @@ export default function ExecutionDetailPage() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>Started: {format(new Date(execution.started_at), "MMM d, HH:mm:ss")}</span>
+                  <span>Started: {formatDateInTimezone(new Date(execution.started_at), userTimezone, "MMM d, HH:mm:ss")}</span>
                 </div>
                 {execution.finished_at && (
                   <span className="text-muted-foreground">
-                    Finished: {format(new Date(execution.finished_at), "MMM d, HH:mm:ss")}
+                    Finished: {formatDateInTimezone(new Date(execution.finished_at), userTimezone, "MMM d, HH:mm:ss")}
                   </span>
                 )}
               </div>
@@ -579,13 +598,13 @@ export default function ExecutionDetailPage() {
                           note?: string;
                         }) => {
                           // Parse rule snapshot if available
-                          let ruleData: any = null;
+                          let ruleData: RuleSnapshotData | null = null;
                           try {
                             if (rulePerf.rule_snapshot) {
-                              ruleData = JSON.parse(rulePerf.rule_snapshot);
+                              ruleData = JSON.parse(rulePerf.rule_snapshot) as RuleSnapshotData;
                             }
-                          } catch (e) {
-                            console.error('Failed to parse rule snapshot:', e);
+                          } catch {
+                            console.error('Failed to parse rule snapshot');
                           }
 
                           return (
@@ -717,17 +736,17 @@ export default function ExecutionDetailPage() {
                   <TableBody>
                     {issues.map((issue: Issue) => {
                       // Parse rule snapshot if available
-                      let ruleData: any = null;
+                      let ruleData: RuleSnapshotData | null = null;
                       try {
                         if (issue.rule_snapshot) {
-                          ruleData = JSON.parse(issue.rule_snapshot);
+                          ruleData = JSON.parse(issue.rule_snapshot) as RuleSnapshotData;
                         }
-                      } catch (e) {
-                        console.error('Failed to parse issue rule snapshot:', e);
+                      } catch {
+                        console.error('Failed to parse issue rule snapshot');
                       }
 
                       // Get rule name from snapshot or fallback to rule_name field
-                      const ruleName = ruleData?.name || (issue as any).rule_name || 'Unknown';
+                      const ruleName = ruleData?.name || (issue as Issue & { rule_name?: string }).rule_name || 'Unknown';
                       const ruleVersion = ruleData?.version;
 
                       return (

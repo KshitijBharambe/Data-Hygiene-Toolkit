@@ -96,13 +96,6 @@ export function useIssues(filters?: {
   return useQuery<Issue[]>({
     queryKey: ["issues", filters],
     queryFn: async () => {
-      console.log("Fetching issues...", {
-        isAuthenticated,
-        hasToken,
-        filters,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
         // Use direct API call to /issues endpoint with proper parameters
         const params: Record<string, unknown> = {};
@@ -115,24 +108,9 @@ export function useIssues(filters?: {
         params.limit = filters?.limit || 50;
         params.offset = filters?.offset || 0;
 
-        console.log("Making request to /issues/ with params:", params);
-        console.log("API base URL:", apiClient.getToken() ? "Has token" : "No token");
-
         const response = await apiClient.get<Issue[]>("/issues/", { params });
-        console.log("Issues data success:", response.data);
         return response.data || [];
       } catch (error: unknown) {
-        console.error("Issues data error details:", {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-
-        // Check if it's a network error specifically
-        if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_NETWORK') {
-          console.error('Network error - API may not be accessible');
-        }
-
         throw error;
       }
     },
@@ -140,7 +118,6 @@ export function useIssues(filters?: {
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
     retry: (failureCount, error) => {
-      console.log("Issues query retry attempt:", { failureCount, error });
       return failureCount < 3;
     },
   });
@@ -152,21 +129,12 @@ export function useIssuesSummary(days: number = 30) {
   return useQuery<IssuesSummary>({
     queryKey: ["issues-summary", days],
     queryFn: async () => {
-      console.log("Fetching issues summary...", {
-        isAuthenticated,
-        hasToken,
-        days,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
         const response = await apiClient.get<IssuesSummary>(
           `/issues/statistics/summary?days=${days}`
         );
-        console.log("Issues summary success:", response.data);
         return response.data;
       } catch (error) {
-        console.error("Issues summary error:", error);
         throw error;
       }
     },
@@ -174,7 +142,6 @@ export function useIssuesSummary(days: number = 30) {
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
     retry: (failureCount, error) => {
-      console.log("Issues summary retry attempt:", { failureCount, error });
       return failureCount < 3;
     },
   });
@@ -186,26 +153,16 @@ export function useIssue(issueId: string) {
   return useQuery<DetailedIssue>({
     queryKey: ["issue", issueId],
     queryFn: async () => {
-      console.log("Fetching detailed issue...", {
-        issueId,
-        isAuthenticated,
-        hasToken,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
         const response = await apiClient.get<DetailedIssue>(`/issues/${issueId}/`);
-        console.log("Detailed issue success:", response.data);
         return response.data;
       } catch (error) {
-        console.error("Detailed issue error:", error);
         throw error;
       }
     },
     enabled: isAuthenticated && hasToken && !!issueId,
     staleTime: 5000, // Consider data stale after 5 seconds
     retry: (failureCount, error) => {
-      console.log("Issue query retry attempt:", { failureCount, error });
       return failureCount < 3;
     },
   });
@@ -218,33 +175,18 @@ export async function createFix(
     comment?: string;
   }
 ) {
-  try {
-    const response = await apiClient.post(`/issues/${issueId}/fix/`, fixData);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to create fix:", err);
-    throw err;
-  }
+  const response = await apiClient.post(`/issues/${issueId}/fix/`, fixData);
+  return response.data;
 }
 
 export async function resolveIssue(issueId: string) {
-  try {
-    const response = await apiClient.patch(`/issues/${issueId}/resolve/`);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to resolve issue:", err);
-    throw err;
-  }
+  const response = await apiClient.patch(`/issues/${issueId}/resolve/`);
+  return response.data;
 }
 
 export async function unresolveIssue(issueId: string) {
-  try {
-    const response = await apiClient.patch(`/issues/${issueId}/unresolve/`);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to unresolve issue:", err);
-    throw err;
-  }
+  const response = await apiClient.patch(`/issues/${issueId}/unresolve/`);
+  return response.data;
 }
 
 // Mutation hooks for better state management

@@ -36,7 +36,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Rule, RuleKind, Criticality } from '@/types/api'
-import { format } from 'date-fns'
+import { formatDate } from '@/lib/utils/date'
 
 const criticalityColors: Record<Criticality, string> = {
   low: 'bg-blue-100 text-blue-800',
@@ -302,7 +302,7 @@ export default function RulesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(rule.created_at), 'MMM d, yyyy')}
+                        {formatDate(rule.created_at, 'MMM d, yyyy')}
                       </TableCell>
                       <TableCell className="text-right">
                         <RuleActionsDropdown rule={rule} />

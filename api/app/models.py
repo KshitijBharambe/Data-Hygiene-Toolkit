@@ -1,9 +1,11 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, func
+from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey, func
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy.dialects.postgresql import UUID, ENUM, TIMESTAMP
+from sqlalchemy.types import DateTime as SQLAlchemyDateTime
 from app.database import Base
 import uuid
 import enum
+from datetime import datetime, timezone
 
 # Enums
 class UserRole(enum.Enum):
@@ -65,8 +67,8 @@ class User(Base):
     role = Column(ENUM(UserRole), nullable=False)
     auth_provider = Column(String)
     auth_subject = Column(String)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     uploaded_datasets = relationship("Dataset", back_populates="uploader")
@@ -84,7 +86,7 @@ class Dataset(Base):
     original_filename = Column(String)
     checksum = Column(String)
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=False)
-    uploaded_at = Column(DateTime, server_default=func.now())
+    uploaded_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     status = Column(ENUM(DatasetStatus), default=DatasetStatus.uploaded)
     row_count = Column(Integer)
     column_count = Column(Integer)
@@ -102,7 +104,7 @@ class DatasetVersion(Base):
     dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
     version_no = Column(Integer, nullable=False)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     rows = Column(Integer)
     columns = Column(Integer)
     change_note = Column(Text)
@@ -141,8 +143,8 @@ class Rule(Base):
     target_columns = Column(Text)
     params = Column(Text)  # JSON as text
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Versioning fields
     version = Column(Integer, default=1, nullable=False)
@@ -175,8 +177,8 @@ class Execution(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     dataset_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=False)
     started_by = Column(String, ForeignKey("users.id"), nullable=False)
-    started_at = Column(DateTime, server_default=func.now())
-    finished_at = Column(DateTime)
+    started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    finished_at = Column(TIMESTAMP(timezone=True))
     status = Column(ENUM(ExecutionStatus), default=ExecutionStatus.queued)
     total_rows = Column(Integer)
     total_rules = Column(Integer)
@@ -221,7 +223,7 @@ class Issue(Base):
     message = Column(Text)
     category = Column(String)
     severity = Column(ENUM(Criticality), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     resolved = Column(Boolean, default=False)
     
     # Relationships
@@ -235,7 +237,7 @@ class Fix(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     issue_id = Column(String, ForeignKey("issues.id"), nullable=False)
     fixed_by = Column(String, ForeignKey("users.id"), nullable=False)
-    fixed_at = Column(DateTime, server_default=func.now())
+    fixed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     new_value = Column(Text)
     comment = Column(Text)
     
@@ -252,7 +254,7 @@ class Export(Base):
     format = Column(ENUM(ExportFormat), nullable=False)
     location = Column(String)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     
     # Relationships
     dataset_version = relationship("DatasetVersion", back_populates="exports")
@@ -268,7 +270,7 @@ class VersionJournal(Base):
     rows_affected = Column(Integer)
     columns_affected = Column(Integer)
     details = Column(Text)
-    occurred_at = Column(DateTime, server_default=func.now())
+    occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     
     # Relationships
     dataset_version = relationship("DatasetVersion", back_populates="journal_entries")

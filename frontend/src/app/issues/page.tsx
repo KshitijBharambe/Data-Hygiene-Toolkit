@@ -54,6 +54,7 @@ import {
 } from "@/lib/hooks/useIssues";
 import React from "react";
 import { FixDialog } from "@/components/issues/fix-dialog";
+import { formatDate, formatDateTime } from "@/lib/utils/date";
 
 export default function IssuesPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -575,7 +576,7 @@ export default function IssuesPage() {
                       <div className="text-right text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {new Date(issue.created_at).toLocaleDateString()}
+                          {formatDate(issue.created_at)}
                         </div>
                         {issue.fix_count > 0 && (
                           <div className="flex items-center gap-1 mt-1">
@@ -927,7 +928,7 @@ export default function IssuesPage() {
                       Created
                     </label>
                     <p className="text-sm">
-                      {new Date(detailedIssue.created_at).toLocaleString()}
+                      {formatDateTime(detailedIssue.created_at)}
                     </p>
                   </div>
                 </div>
@@ -979,7 +980,7 @@ export default function IssuesPage() {
                           <div className="flex justify-between items-start mb-2">
                             <span className="font-medium">Fix applied</span>
                             <span className="text-xs text-muted-foreground">
-                              {new Date(fix.fixed_at).toLocaleString()}
+                              {formatDateTime(fix.fixed_at)}
                             </span>
                           </div>
                           {fix.new_value && (

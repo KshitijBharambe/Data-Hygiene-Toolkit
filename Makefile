@@ -13,6 +13,10 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 NC := \033[0m # No Color
 
+# Enable Docker BuildKit for optimized builds
+export DOCKER_BUILDKIT := 1
+export COMPOSE_DOCKER_CLI_BUILD := 1
+
 ##@ General
 
 help: ## Display this help message
@@ -42,13 +46,16 @@ dev-down: ## Stop local development environment
 
 prod-sim: prod-sim-build prod-sim-up ## Build and start production simulation environment
 
-prod-sim-build: ## Build production simulation containers
-	@echo "$(GREEN)Building production simulation containers...$(NC)"
+prod-sim-build: ## Build production simulation containers (optimized with BuildKit)
+	@echo "$(GREEN)Building production simulation containers with optimizations...$(NC)"
 	@if [ ! -f .env.prod-sim ]; then \
 		echo "$(YELLOW)Warning: .env.prod-sim not found, using defaults$(NC)"; \
 	fi
-	@docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim build
+	@echo "$(BLUE)🔧 Using Docker BuildKit for faster builds$(NC)"
+	@docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim build --parallel --compress
 	@echo "$(GREEN)✓ Build complete$(NC)"
+	@echo "$(BLUE)📊 Image sizes:$(NC)"
+	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "(prodsim|REPOSITORY)" | head -5 || true
 
 prod-sim-up: ## Start production simulation environment
 	@echo "$(GREEN)Starting production simulation environment...$(NC)"
@@ -206,10 +213,23 @@ clean-docker: ## Remove all stopped containers and dangling images
 	docker image prune -f
 	@echo "$(GREEN)✓ Docker cleaned$(NC)"
 
+clean-build-cache: ## Clean Docker build cache (keep 1GB)
+	@echo "$(YELLOW)Cleaning Docker build cache...$(NC)"
+	docker buildx prune --keep-storage=1GB -f || docker builder prune --keep-storage=1GB -f
+	@echo "$(GREEN)✓ Build cache cleaned$(NC)"
+
 clean-all: prod-sim-clean dev-down clean-docker ## Clean everything (dev + prod-sim + docker)
 	@echo "$(GREEN)✓ All environments cleaned$(NC)"
 
 rebuild: prod-sim-clean prod-sim-build prod-sim-up ## Full rebuild of production simulation
+
+rebuild-optimized: ## Full rebuild with cache optimization
+	@echo "$(GREEN)Rebuilding with cache optimization...$(NC)"
+	@docker buildx prune --keep-storage=1GB -f || true
+	@$(MAKE) prod-sim-clean
+	@$(MAKE) prod-sim-build
+	@$(MAKE) prod-sim-up
+	@echo "$(GREEN)✓ Optimized rebuild complete$(NC)"
 
 ##@ Utility
 
@@ -252,3 +272,15 @@ env-check: ## Check if required environment files exist
 	else \
 		echo "$(RED)✗ frontend/.env.local missing$(NC)"; \
 	fi
+
+docker-stats: ## Show Docker resource usage for prod-sim containers
+	@echo "$(BLUE)📈 Resource usage:$(NC)"
+	@docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}" | grep -E "(prodsim|CONTAINER)" || echo "$(YELLOW)No prod-sim containers running$(NC)"
+
+docker-info: ## Show Docker build info and configuration
+	@echo "$(BLUE)🐳 Docker Build Configuration:$(NC)"
+	@echo "  BuildKit Enabled: $${DOCKER_BUILDKIT:-not set}"
+	@echo "  Compose CLI Build: $${COMPOSE_DOCKER_CLI_BUILD:-not set}"
+	@echo ""
+	@echo "$(BLUE)📦 Docker Images:$(NC)"
+	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" | grep -E "(api|frontend|REPOSITORY)" || true

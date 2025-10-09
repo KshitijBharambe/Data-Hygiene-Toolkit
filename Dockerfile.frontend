@@ -8,7 +8,7 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 
 # ============================================================================
@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY frontend/ .
 
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -37,7 +37,8 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 # Build Next.js application (standalone output as configured in next.config.ts)
-RUN npm run build
+# Note: Using next build directly without turbopack for production compatibility
+RUN npx next build
 
 # ============================================================================
 # Stage 3: Runner (Production)

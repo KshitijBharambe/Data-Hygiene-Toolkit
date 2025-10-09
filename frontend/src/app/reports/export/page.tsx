@@ -41,12 +41,6 @@ export default function ExportDataPage() {
 
   const handleExport = () => {
     // Export logic would be implemented here
-    console.log("Exporting:", {
-      dataset: selectedDataset,
-      format: exportFormat,
-      metadata: includeMetadata,
-      issues: includeIssues,
-    });
   };
 
   return (

@@ -161,12 +161,9 @@ export default function LiquidEther({
   const resizeRafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log('LiquidEther useEffect triggered', { mountRef: mountRef.current });
     if (!mountRef.current) {
-      console.log('No mountRef.current, returning');
       return;
     }
-    console.log('LiquidEther initializing...');
 
     function makePaletteTexture(stops: string[]): THREE.DataTexture {
       let arr: string[];
@@ -269,7 +266,6 @@ export default function LiquidEther({
       private _onMouseLeave = this.onMouseLeave.bind(this);
       private _onTouchEnd = this.onTouchEnd.bind(this);
       init(container: HTMLElement) {
-        console.log('Mouse init called with container:', container);
         this.container = container;
         container.addEventListener('mousemove', this._onMouseMove);
         container.addEventListener('touchstart', this._onTouchStart, { passive: true });
@@ -277,7 +273,6 @@ export default function LiquidEther({
         container.addEventListener('mouseenter', this._onMouseEnter);
         container.addEventListener('mouseleave', this._onMouseLeave);
         container.addEventListener('touchend', this._onTouchEnd);
-        console.log('Mouse event listeners added to container');
       }
       dispose() {
         const c = this.container;
@@ -306,7 +301,6 @@ export default function LiquidEther({
         this.mouseMoved = true;
       }
       onDocumentMouseMove(event: MouseEvent) {
-        console.log('Mouse move event triggered', event);
         if (this.onInteract) this.onInteract();
         if (this.isAutoActive && !this.hasUserControl && !this.takeoverActive) {
           if (!this.container) return;

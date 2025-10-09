@@ -381,7 +381,7 @@ async def get_quality_trends(
 
     try:
         # Get executions from the last N days
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         executions = (
             db.query(Execution)
@@ -427,7 +427,7 @@ async def get_quality_trends(
         return {
             "analysis_period": {
                 "start_date": start_date.date().isoformat(),
-                "end_date": datetime.now().date().isoformat(),
+                "end_date": datetime.now(timezone.utc).date().isoformat(),
                 "days_analyzed": days
             },
             "trends": list(trends.values()),
@@ -591,8 +591,8 @@ async def get_system_health(
             export_storage_size = 0
 
         # Recent activity health
-        from datetime import datetime, timedelta
-        recent_threshold = datetime.now() - timedelta(hours=24)
+        from datetime import datetime, timedelta, timezone
+        recent_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
 
         recent_activity = {
             "recent_uploads": db.query(Dataset).filter(Dataset.uploaded_at >= recent_threshold).count(),
@@ -602,7 +602,7 @@ async def get_system_health(
 
         return {
             "system_status": "healthy",
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "database_health": {
                 "total_records": total_tables,
                 "connection_status": "connected"
@@ -632,10 +632,7 @@ async def get_system_health(
 
 
 def _get_avg_execution_time(db: Session) -> float:
-    """Get average execution time from recent executions"""
-    from datetime import datetime, timedelta
-
-    recent_threshold = datetime.now() - timedelta(days=7)
+    recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
     recent_executions = (
         db.query(Execution)
         .filter(Execution.started_at >= recent_threshold)
@@ -658,7 +655,7 @@ def _get_success_rate(db: Session) -> float:
     """Get success rate from recent executions"""
     from datetime import datetime, timedelta
 
-    recent_threshold = datetime.now() - timedelta(days=7)
+    recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
     recent_executions = (
         db.query(Execution)
         .filter(Execution.started_at >= recent_threshold)

@@ -14,20 +14,14 @@ export function useAuthenticatedApi() {
   useEffect(() => {
     if (status === 'authenticated' && session?.accessToken) {
       // Set token in API client whenever session updates
-      console.log('🔑 Setting token from session:', {
-        hasToken: !!session.accessToken,
-        tokenLength: (session.accessToken as string)?.length
-      })
       apiClient.setToken(session.accessToken as string)
       setTokenSynced(true)
     } else if (status === 'unauthenticated') {
       // Clear token if user is not authenticated
-      console.log('🔓 Clearing token - user unauthenticated')
       apiClient.clearToken()
       setTokenSynced(false)
     } else {
       // Status is 'loading'
-      console.log('⏳ Auth status:', status)
       setTokenSynced(false)
     }
   }, [session?.accessToken, status])

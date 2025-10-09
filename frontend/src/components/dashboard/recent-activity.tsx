@@ -15,9 +15,9 @@ import {
   Clock,
   Database,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
 import { useDashboardOverview } from "@/lib/hooks/useDashboard";
 import { MagicBentoWrapper } from "@/components/MagicBentoWrapper";
+import { formatRelativeTime } from "@/lib/utils/date";
 
 interface ActivityItem {
   id: string;
@@ -204,9 +204,7 @@ export function RecentActivity() {
                     <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
                       {activity.user && <span>{activity.user}</span>}
                       <span>
-                        {formatDistanceToNow(activity.timestamp, {
-                          addSuffix: true,
-                        })}
+                        {formatRelativeTime(activity.timestamp)}
                       </span>
                     </div>
                   </div>

@@ -38,7 +38,6 @@ class ApiClient {
       ? baseURL.replace('http://', 'https://')
       : baseURL;
 
-    console.log('🔧 ApiClient created with baseURL:', secureURL, 'NODE_ENV:', process.env.NODE_ENV);
     this.client = axios.create({
       baseURL: secureURL,
       headers: {
@@ -52,10 +51,6 @@ class ApiClient {
         if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
-
-        // Debug: Log the actual URL being requested
-        const fullUrl = config.baseURL ? `${config.baseURL}${config.url}` : config.url;
-        console.log('🌐 Axios request:', fullUrl);
 
         return config;
       },
@@ -77,7 +72,6 @@ class ApiClient {
       try {
         this.token = localStorage.getItem("auth_token");
       } catch (error) {
-        console.warn("Failed to load token from localStorage:", error);
         this.token = null;
       }
     }
@@ -256,7 +250,6 @@ class ApiClient {
   }
 
   async updateRule(id: string, rule: RuleUpdate): Promise<Rule> {
-    console.log('🔧 API Client updateRule called with:', { id, rule });
     const response = await this.client.put<Rule>(`/rules/${id}`, rule);
     return response.data;
   }
@@ -503,7 +496,6 @@ function getInstance(): ApiClient {
 
   // Recreate instance if URL changed or doesn't exist
   if (!instance || lastUrl !== currentUrl) {
-    console.log('🔄 Creating new ApiClient instance with URL:', currentUrl);
     instance = new ApiClient(currentUrl);
     lastUrl = currentUrl;
   }

@@ -22,8 +22,17 @@ import {
   Shield
 } from 'lucide-react'
 import Link from 'next/link'
-import { Rule, Criticality } from '@/types/api'
+import { Criticality, Rule } from '@/types/api'
 import { format } from 'date-fns'
+
+// Extended Rule type with versioning fields
+interface RuleVersion extends Rule {
+  version: number;
+  is_latest: boolean;
+  parent_rule_id?: string;
+  rule_family_id?: string;
+  change_log?: string | null;
+}
 
 const criticalityColors: Record<Criticality, string> = {
   low: 'bg-blue-100 text-blue-800',
@@ -32,7 +41,7 @@ const criticalityColors: Record<Criticality, string> = {
   critical: 'bg-red-100 text-red-800'
 }
 
-function ChangeLogDisplay({ changeLog }: { changeLog: string | null }) {
+function ChangeLogDisplay({ changeLog }: { changeLog: string | null | undefined }) {
   if (!changeLog) return null
 
   try {
@@ -48,7 +57,7 @@ function ChangeLogDisplay({ changeLog }: { changeLog: string | null }) {
 
         {log.reason && (
           <div className="text-muted-foreground italic">
-            "{log.reason}"
+            &quot;{log.reason}&quot;
           </div>
         )}
 
@@ -56,7 +65,7 @@ function ChangeLogDisplay({ changeLog }: { changeLog: string | null }) {
           <div className="mt-2">
             <div className="font-medium mb-1">Changes:</div>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              {Object.entries(log.changes).map(([field, change]: [string, any]) => (
+              {Object.entries(log.changes as Record<string, { old?: unknown; new?: unknown }>).map(([field, change]) => (
                 <li key={field}>
                   <span className="font-medium">{field}</span>:
                   {change.old !== undefined && change.new !== undefined ? (
@@ -75,7 +84,7 @@ function ChangeLogDisplay({ changeLog }: { changeLog: string | null }) {
         )}
       </div>
     )
-  } catch (e) {
+  } catch {
     return (
       <div className="text-sm text-muted-foreground">
         {changeLog}
@@ -90,7 +99,7 @@ export default function RuleVersionsPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
-  const { data: versions, isLoading, error } = useRuleVersions(id)
+  const { data: versions, isLoading, error } = useRuleVersions(id) as { data: RuleVersion[] | undefined; isLoading: boolean; error: Error | null }
 
   if (isLoading) {
     return (
@@ -136,7 +145,7 @@ export default function RuleVersionsPage({
                 Version History
               </h1>
               <p className="text-muted-foreground mt-2">
-                All versions of "{ruleName}"
+                All versions of &quot;{ruleName}&quot;
               </p>
             </div>
           </div>

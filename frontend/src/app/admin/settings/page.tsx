@@ -232,7 +232,6 @@ export default function AdminSettingsPage() {
     setIsSaving(false)
     setHasChanges(false)
     // In a real app, you would make an API call here
-    console.log('Saving settings:', settings)
   }
 
   const handleReset = () => {

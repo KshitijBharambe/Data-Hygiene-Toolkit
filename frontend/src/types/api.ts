@@ -103,6 +103,11 @@ export interface Rule {
   created_by: string;
   created_at: string;
   updated_at: string;
+  version?: number;
+  parent_rule_id?: string;
+  rule_family_id?: string;
+  is_latest?: boolean;
+  change_log?: string | null;
 }
 
 export interface RuleCreate {

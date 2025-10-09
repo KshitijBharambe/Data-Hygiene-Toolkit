@@ -186,20 +186,14 @@ export default function RuleDetailPage({
       if (data.params && data.params.trim()) {
         try {
           const parsedParams = JSON.parse(data.params);
-          console.log('✅ Parsed params:', parsedParams, 'Type:', typeof parsedParams);
           payload.params = parsedParams;
-        } catch (e) {
-          console.error('❌ Failed to parse params:', data.params, e);
+        } catch {
           form.setError("params", {
             message: "Invalid JSON format in parameters",
           });
           return;
         }
-      } else {
-        console.log('ℹ️ No params provided, omitting from payload');
       }
-
-      console.log('📤 Sending update payload:', JSON.stringify(payload, null, 2));
 
       await updateRule.mutateAsync({
         id: rule.id,
@@ -208,15 +202,8 @@ export default function RuleDetailPage({
 
       setIsEditing(false);
     } catch (error: unknown) {
-      console.error("Failed to update rule:", error);
-      
       // Log detailed error information
       const axiosError = error as { response?: { data?: { detail?: unknown }; status?: number; headers?: unknown } };
-      if (axiosError.response) {
-        console.error("Error response:", axiosError.response.data);
-        console.error("Error status:", axiosError.response.status);
-        console.error("Error headers:", axiosError.response.headers);
-      }
       
       // Show user-friendly error message
       if (axiosError.response?.status === 422) {

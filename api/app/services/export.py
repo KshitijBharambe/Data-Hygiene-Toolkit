@@ -4,7 +4,7 @@ import io
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -75,7 +75,7 @@ class ExportService:
         )
 
         # Generate export filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_version.dataset_id).first()
         base_filename = f"{dataset.name}_v{dataset_version.version_number}_{timestamp}"
 
@@ -261,7 +261,7 @@ class ExportService:
                 "last_execution": executions[-1].created_at if executions else None
             },
             "export_info": {
-                "exported_at": datetime.now(),
+                "exported_at": datetime.now(timezone.utc),
                 "export_version": "1.0"
             }
         }
@@ -479,7 +479,7 @@ class ExportService:
         df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
 
         # Generate comprehensive report
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         report_filename = f"{dataset.name}_quality_report_{timestamp}"
 
         file_path = self.export_storage_path / f"{report_filename}.xlsx"
@@ -578,7 +578,7 @@ class ExportService:
             "Data Uniqueness Score": round(uniqueness, 2),
             "Overall Quality Score": round(overall_quality, 2),
             "Last Updated": version.created_at,
-            "Report Generated": datetime.now()
+            "Report Generated": datetime.now(timezone.utc)
         }
 
     def _generate_detailed_column_analysis(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:

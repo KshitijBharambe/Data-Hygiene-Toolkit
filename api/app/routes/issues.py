@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_session
 from app.models import Issue, Fix, Rule, Execution, Dataset, DatasetVersion, User, Criticality
@@ -223,7 +223,7 @@ async def get_issues_summary(
     """
     try:
         # Calculate date range
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         # Total counts
         total_issues = db.query(Issue).count()
@@ -240,9 +240,9 @@ async def get_issues_summary(
         # Recent trends
         issues_by_day = {}
         for i in range(days):
-            day = (datetime.now() - timedelta(days=i)).date()
-            day_start = datetime.combine(day, datetime.min.time())
-            day_end = datetime.combine(day, datetime.max.time())
+            day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
+            day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+            day_end = datetime.combine(day, datetime.max.time(), tzinfo=timezone.utc)
 
             daily_count = db.query(Issue).filter(
                 Issue.created_at >= day_start,
