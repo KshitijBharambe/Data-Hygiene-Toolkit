@@ -316,9 +316,9 @@ async def get_dashboard_overview(
         # Dataset status distribution
         status_distribution = {}
         for dataset in datasets:
-            status = dataset.status.value
-            status_distribution[status] = status_distribution.get(
-                status, 0) + 1
+            dataset_status = dataset.status.value
+            status_distribution[dataset_status] = status_distribution.get(
+                dataset_status, 0) + 1
 
         return {
             "overview": {

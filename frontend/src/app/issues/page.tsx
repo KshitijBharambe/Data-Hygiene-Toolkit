@@ -37,6 +37,9 @@ import {
   MessageSquare,
   Calendar,
   Database,
+  ChevronLeft,
+  ChevronRight,
+  CheckSquare,
 } from "lucide-react";
 import { useRealTimeUpdates } from "@/lib/hooks/useRealTimeUpdates";
 import { useDatasets } from "@/lib/hooks/useDatasets";
@@ -54,6 +57,7 @@ import {
 } from "@/lib/hooks/useIssues";
 import React from "react";
 import { FixDialog } from "@/components/issues/fix-dialog";
+import { BulkFixDialog } from "@/components/issues/bulk-fix-dialog";
 import { formatDate, formatDateTime } from "@/lib/utils/date";
 
 export default function IssuesPage() {
@@ -61,12 +65,16 @@ export default function IssuesPage() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [datasetFilter, setDatasetFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("created_at");
+  const [sortBy, setSortBy] = useState<string>("created_at_newest");
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [showIssueDetails, setShowIssueDetails] = useState(false);
   const [showFixDialog, setShowFixDialog] = useState(false);
   const [issueToFix, setIssueToFix] = useState<Issue | null>(null);
   const [isUnresolving, setIsUnresolving] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIssues, setSelectedIssues] = useState<Set<string>>(new Set());
+  const [showBulkFixDialog, setShowBulkFixDialog] = useState(false);
+  const itemsPerPage = 8;
 
   // Fetch detailed issue data when an issue is selected
   const {
@@ -80,17 +88,6 @@ export default function IssuesPage() {
   };
   const [isFixing, setIsFixing] = useState<string | null>(null);
 
-  // Create filters object for the useIssues hook
-  const filters = {
-    severity: severityFilter !== "all" ? severityFilter : undefined,
-    resolved: statusFilter === "all" ? undefined : statusFilter === "resolved",
-    limit: 50,
-  };
-
-  const { data: issues, isLoading, refetch } = useIssues(filters);
-  const { data: issuesSummary, isLoading: summaryLoading } = useIssuesSummary();
-  const { invalidateIssuesData } = useRealTimeUpdates();
-
   // Fetch all datasets for the filter dropdown
   const { data: datasetsResponse, isLoading: datasetsLoading } = useDatasets(
     1,
@@ -102,13 +99,29 @@ export default function IssuesPage() {
     if (!datasetsResponse?.items || datasetsResponse.items.length === 0)
       return [];
 
-    const datasets = datasetsResponse.items
-      .map((dataset) => dataset.name)
-      .filter((name) => name && name.trim() !== "")
-      .sort();
-
-    return datasets;
+    return datasetsResponse.items
+      .filter((dataset) => dataset.name && dataset.name.trim() !== "")
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [datasetsResponse]);
+
+  // Get dataset ID from dataset name for filtering
+  const selectedDatasetId = React.useMemo(() => {
+    if (datasetFilter === "all") return undefined;
+    const dataset = availableDatasets.find((d) => d.name === datasetFilter);
+    return dataset?.id;
+  }, [datasetFilter, availableDatasets]);
+
+  // Create filters object for the useIssues hook
+  const filters = {
+    severity: severityFilter !== "all" ? severityFilter : undefined,
+    resolved: statusFilter === "all" ? undefined : statusFilter === "resolved",
+    dataset_id: selectedDatasetId,
+    limit: 500, // Increase limit to get more issues for client-side filtering
+  };
+
+  const { data: issues, isLoading, refetch } = useIssues(filters);
+  const { data: issuesSummary, isLoading: summaryLoading } = useIssuesSummary();
+  const { invalidateIssuesData } = useRealTimeUpdates();
 
   const handleViewIssue = (issue: Issue) => {
     setSelectedIssueId(issue.id);
@@ -189,6 +202,57 @@ export default function IssuesPage() {
     }
   };
 
+  const handleBulkFix = async (fixData: {
+    new_value?: string;
+    comment?: string;
+  }) => {
+    if (selectedIssues.size === 0) return;
+
+    const selectedIssuesList = Array.from(selectedIssues);
+
+    try {
+      toast.loading(`Fixing ${selectedIssuesList.length} issues...`, { id: "bulk-fix" });
+
+      // Apply fix to all selected issues
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const issueId of selectedIssuesList) {
+        try {
+          if (fixData.new_value || fixData.comment) {
+            // Apply fix with value/comment
+            await createFix(issueId, fixData);
+          } else {
+            // Just resolve without a fix
+            await resolveIssue(issueId);
+          }
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to fix issue ${issueId}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Show results
+      if (errorCount === 0) {
+        toast.success(`Successfully fixed ${successCount} issues`, { id: "bulk-fix" });
+      } else {
+        toast.warning(
+          `Fixed ${successCount} issues, ${errorCount} failed`,
+          { id: "bulk-fix" }
+        );
+      }
+
+      // Clear selection and refresh
+      setSelectedIssues(new Set());
+      setShowBulkFixDialog(false);
+      await Promise.all([invalidateIssuesData(), refetch()]);
+    } catch (error: unknown) {
+      console.error("Bulk fix error:", error);
+      toast.error("Failed to process bulk fix", { id: "bulk-fix" });
+    }
+  };
+
   const getSeverityColor = (severity: string) => {
     switch (severity?.toLowerCase()) {
       case "critical":
@@ -250,47 +314,67 @@ export default function IssuesPage() {
     recentIssues: (issuesSummary as IssuesSummary)?.summary?.recent_issues || 0,
   };
 
-  // Filter and sort issues locally for display (since backend filtering is limited)
+  // Filter and sort issues locally for display
   let filteredIssues = (issues as Issue[]) || [];
 
-  // Apply search filter
+  // Apply search filter (searches across rule name, dataset name, message, column name)
   if (searchTerm) {
     filteredIssues = filteredIssues.filter(
       (issue) =>
         issue.rule_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.dataset_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.message?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        issue.column_name?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }
-
-  // Apply dataset filter
-  if (datasetFilter !== "all") {
-    filteredIssues = filteredIssues.filter(
-      (issue) => issue.dataset_name === datasetFilter
+        issue.column_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.current_value?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }
 
   // Apply local sorting
   filteredIssues = [...filteredIssues].sort((a, b) => {
     switch (sortBy) {
-      case "severity":
+      case "severity_high_to_low":
         const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
         return (
           (severityOrder[b.severity as keyof typeof severityOrder] || 0) -
           (severityOrder[a.severity as keyof typeof severityOrder] || 0)
         );
-      case "dataset":
+      case "severity_low_to_high":
+        const severityOrderAsc = { critical: 4, high: 3, medium: 2, low: 1 };
+        return (
+          (severityOrderAsc[a.severity as keyof typeof severityOrderAsc] || 0) -
+          (severityOrderAsc[b.severity as keyof typeof severityOrderAsc] || 0)
+        );
+      case "dataset_a_to_z":
         return (a.dataset_name || "").localeCompare(b.dataset_name || "");
-      case "rule":
+      case "dataset_z_to_a":
+        return (b.dataset_name || "").localeCompare(a.dataset_name || "");
+      case "rule_a_to_z":
         return (a.rule_name || "").localeCompare(b.rule_name || "");
-      case "created_at":
+      case "rule_z_to_a":
+        return (b.rule_name || "").localeCompare(a.rule_name || "");
+      case "created_at_oldest":
+        return (
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+      case "created_at_newest":
       default:
         return (
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
     }
   });
+
+  // Pagination calculations
+  const totalIssues = filteredIssues.length;
+  const totalPages = Math.ceil(totalIssues / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedIssues = filteredIssues.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, severityFilter, statusFilter, datasetFilter, sortBy]);
 
   return (
     <MainLayout>
@@ -416,8 +500,8 @@ export default function IssuesPage() {
                       </SelectItem>
                     ) : (
                       availableDatasets.map((dataset) => (
-                        <SelectItem key={dataset} value={dataset}>
-                          {dataset}
+                        <SelectItem key={dataset.id} value={dataset.name}>
+                          {dataset.name}
                         </SelectItem>
                       ))
                     )}
@@ -467,10 +551,14 @@ export default function IssuesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="created_at">Date Created</SelectItem>
-                    <SelectItem value="severity">Severity</SelectItem>
-                    <SelectItem value="dataset">Dataset</SelectItem>
-                    <SelectItem value="rule">Rule</SelectItem>
+                    <SelectItem value="created_at_newest">Date: Newest First</SelectItem>
+                    <SelectItem value="created_at_oldest">Date: Oldest First</SelectItem>
+                    <SelectItem value="severity_high_to_low">Severity: High to Low</SelectItem>
+                    <SelectItem value="severity_low_to_high">Severity: Low to High</SelectItem>
+                    <SelectItem value="dataset_a_to_z">Dataset: A to Z</SelectItem>
+                    <SelectItem value="dataset_z_to_a">Dataset: Z to A</SelectItem>
+                    <SelectItem value="rule_a_to_z">Rule: A to Z</SelectItem>
+                    <SelectItem value="rule_z_to_a">Rule: Z to A</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -485,7 +573,7 @@ export default function IssuesPage() {
                     Loading issues...
                   </div>
                 </div>
-              ) : filteredIssues?.length === 0 ? (
+              ) : totalIssues === 0 ? (
                 <div className="text-center py-8">
                   <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">
@@ -501,121 +589,244 @@ export default function IssuesPage() {
                   </p>
                 </div>
               ) : (
-                filteredIssues?.map((issue) => (
-                  <div
-                    key={issue.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={getSeverityColor(issue.severity)}
-                          className="flex items-center gap-1"
-                        >
-                          {getSeverityIcon(issue.severity)}
-                          {issue.severity}
-                        </Badge>
-                        {issue.resolved ? (
-                          <Badge variant="outline" className="text-green-600">
-                            <CheckCircle className="mr-1 h-3 w-3" />
-                            Resolved
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-orange-600">
-                            <Clock className="mr-1 h-3 w-3" />
-                            Open
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium">{issue.rule_name}</h4>
-                          <span className="text-sm text-muted-foreground">
-                            •
-                          </span>
-                          <span className="text-sm text-muted-foreground flex items-center gap-1">
-                            <Database className="h-3 w-3" />
-                            {issue.dataset_name}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            •
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            Row {issue.row_index}, Column: {issue.column_name}
-                          </span>
+                <>
+                  {/* Pagination Info and Bulk Actions */}
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300"
+                          checked={selectedIssues.size > 0 && selectedIssues.size === paginatedIssues.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedIssues(new Set(paginatedIssues.map(i => i.id)));
+                            } else {
+                              setSelectedIssues(new Set());
+                            }
+                          }}
+                        />
+                        <span className="text-muted-foreground">
+                          {selectedIssues.size > 0 ? `${selectedIssues.size} selected` : "Select all"}
+                        </span>
+                      </label>
+                      {selectedIssues.size > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => setShowBulkFixDialog(true)}
+                          >
+                            <CheckSquare className="h-4 w-4 mr-1" />
+                            Fix Selected ({selectedIssues.size})
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedIssues(new Set())}
+                          >
+                            Clear Selection
+                          </Button>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {issue.message}
-                        </p>
-                        {issue.current_value && (
-                          <div className="mt-2 text-xs">
-                            <span className="text-muted-foreground">
-                              Current:{" "}
-                            </span>
-                            <code className="bg-muted px-1 py-0.5 rounded">
-                              {issue.current_value || "null"}
-                            </code>
-                            {issue.suggested_value && (
-                              <>
-                                <span className="text-muted-foreground">
-                                  {" "}
-                                  → Suggested:{" "}
-                                </span>
-                                <code className="bg-green-50 text-green-700 px-1 py-0.5 rounded">
-                                  {issue.suggested_value}
-                                </code>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="text-right text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(issue.created_at)}
-                        </div>
-                        {issue.fix_count > 0 && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <MessageSquare className="h-3 w-3" />
-                            {issue.fix_count} fix
-                            {issue.fix_count !== 1 ? "es" : ""}
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewIssue(issue)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {!issue.resolved ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleOpenFixDialog(issue)}
-                          disabled={isFixing === issue.id}
-                        >
-                          {isFixing === issue.id ? "Fixing..." : "Fix Issue"}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleUnresolveIssue(issue)}
-                          disabled={isUnresolving === issue.id}
-                        >
-                          {isUnresolving === issue.id
-                            ? "Unresolving..."
-                            : "Unresolve"}
-                        </Button>
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span>
+                        Showing {startIndex + 1}-{Math.min(endIndex, totalIssues)} of {totalIssues} issues
+                      </span>
+                      {totalPages > 1 && (
+                        <span>
+                          Page {currentPage} of {totalPages}
+                        </span>
                       )}
                     </div>
                   </div>
-                ))
+
+                  {paginatedIssues?.map((issue) => (
+                    <div
+                      key={issue.id}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-4 flex-1">
+                        {/* Checkbox for bulk selection */}
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-gray-300 flex-shrink-0"
+                          checked={selectedIssues.has(issue.id)}
+                          onChange={(e) => {
+                            const newSelected = new Set(selectedIssues);
+                            if (e.target.checked) {
+                              newSelected.add(issue.id);
+                            } else {
+                              newSelected.delete(issue.id);
+                            }
+                            setSelectedIssues(newSelected);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={getSeverityColor(issue.severity)}
+                            className="flex items-center gap-1"
+                          >
+                            {getSeverityIcon(issue.severity)}
+                            {issue.severity}
+                          </Badge>
+                          {issue.resolved ? (
+                            <Badge variant="outline" className="text-green-600">
+                              <CheckCircle className="mr-1 h-3 w-3" />
+                              Resolved
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-orange-600">
+                              <Clock className="mr-1 h-3 w-3" />
+                              Open
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium">{issue.rule_name}</h4>
+                            <span className="text-sm text-muted-foreground">
+                              •
+                            </span>
+                            <span className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Database className="h-3 w-3" />
+                              {issue.dataset_name}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              •
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              Row {issue.row_index}, Column: {issue.column_name}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {issue.message}
+                          </p>
+                          {issue.current_value && (
+                            <div className="mt-2 text-xs">
+                              <span className="text-muted-foreground">
+                                Current:{" "}
+                              </span>
+                              <code className="bg-muted px-1 py-0.5 rounded">
+                                {issue.current_value || "null"}
+                              </code>
+                              {issue.suggested_value && (
+                                <>
+                                  <span className="text-muted-foreground">
+                                    {" "}
+                                    → Suggested:{" "}
+                                  </span>
+                                  <code className="bg-green-50 text-green-700 px-1 py-0.5 rounded">
+                                    {issue.suggested_value}
+                                  </code>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="text-right text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(issue.created_at)}
+                          </div>
+                          {issue.fix_count > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <MessageSquare className="h-3 w-3" />
+                              {issue.fix_count} fix
+                              {issue.fix_count !== 1 ? "es" : ""}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewIssue(issue)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {!issue.resolved ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenFixDialog(issue)}
+                            disabled={isFixing === issue.id}
+                          >
+                            {isFixing === issue.id ? "Fixing..." : "Fix Issue"}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUnresolveIssue(issue)}
+                            disabled={isUnresolving === issue.id}
+                          >
+                            {isUnresolving === issue.id
+                              ? "Unresolving..."
+                              : "Unresolve"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-2 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          // Show first page, last page, current page, and surrounding pages
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </CardContent>
@@ -1074,6 +1285,15 @@ export default function IssuesPage() {
           onOpenChange={setShowFixDialog}
           onSubmit={handleApplyFix}
           isSubmitting={isFixing === issueToFix?.id}
+        />
+
+        {/* Bulk Fix Dialog */}
+        <BulkFixDialog
+          issues={filteredIssues.filter(issue => selectedIssues.has(issue.id))}
+          open={showBulkFixDialog}
+          onOpenChange={setShowBulkFixDialog}
+          onSubmit={handleBulkFix}
+          isSubmitting={false}
         />
       </div>
     </MainLayout>

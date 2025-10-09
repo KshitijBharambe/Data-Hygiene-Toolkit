@@ -7,7 +7,7 @@ from app.database import get_session
 from app.models import User, Rule, RuleKind, Criticality, Execution, Issue
 from app.auth import get_any_authenticated_user, get_admin_user
 from app.schemas import (
-    RuleResponse, RuleCreate, RuleUpdate, ExecutionResponse, 
+    RuleResponse, RuleCreate, RuleUpdate, ExecutionResponse,
     IssueResponse, RuleTestRequest
 )
 from app.services.rule_engine import RuleEngineService
@@ -25,8 +25,10 @@ router = APIRouter(prefix="/rules", tags=["Business Rules"])
 @router.get("", response_model=List[RuleResponse])
 async def list_rules(
     active_only: bool = Query(True, description="Filter to active rules only"),
-    latest_only: bool = Query(True, description="Show only latest versions of rules"),
-    rule_kind: Optional[RuleKind] = Query(None, description="Filter by rule kind"),
+    latest_only: bool = Query(
+        True, description="Show only latest versions of rules"),
+    rule_kind: Optional[RuleKind] = Query(
+        None, description="Filter by rule kind"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -65,7 +67,7 @@ async def get_rule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     return RuleResponse.model_validate(rule)
 
 
@@ -73,13 +75,14 @@ async def get_rule(
 async def create_rule(
     rule_data: RuleCreate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)  # Only admins can create rules
+    # Only admins can create rules
+    current_user: User = Depends(get_admin_user)
 ):
     """
     Create a new business rule
     """
     rule_service = RuleEngineService(db)
-    
+
     try:
         rule = rule_service.create_rule(
             name=rule_data.name,
@@ -90,9 +93,9 @@ async def create_rule(
             params=rule_data.params,
             current_user=current_user
         )
-        
+
         return RuleResponse.model_validate(rule)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -248,28 +251,28 @@ async def test_rule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     try:
         import pandas as pd
         from app.services.rule_engine import RuleEngineService
-        
+
         # Convert test data to DataFrame
         df = pd.DataFrame(test_data.sample_data)
-        
+
         # Get appropriate validator
         rule_service = RuleEngineService(db)
         validator_class = rule_service.validators.get(rule.kind)
-        
+
         if not validator_class:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No validator available for rule kind: {rule.kind}"
             )
-        
+
         # Run validation
         validator = validator_class(rule, df, db)
         issues = validator.validate()
-        
+
         return {
             "rule_name": rule.name,
             "total_rows_tested": len(df),
@@ -281,7 +284,7 @@ async def test_rule(
                 "categories": list(set(issue['category'] for issue in issues))
             }
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -304,7 +307,7 @@ async def get_available_rule_kinds():
             }
         },
         {
-            "kind": "standardization", 
+            "kind": "standardization",
             "description": "Standardize data formats (dates, phones, emails)",
             "example_params": {
                 "columns": ["date_column"],
@@ -394,13 +397,13 @@ async def get_rule_executions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     executions = db.query(Execution).join(
         Execution.execution_rules
     ).filter_by(rule_id=rule_id).order_by(
         Execution.started_at.desc()
     ).limit(limit).all()
-    
+
     return [ExecutionResponse.model_validate(execution) for execution in executions]
 
 
@@ -420,15 +423,15 @@ async def get_rule_versions(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     # Find the root rule (original)
     root_rule_id = get_rule_root_id(rule)
-    
+
     # Get all versions
     versions = db.query(Rule).filter(
         (Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)
     ).order_by(Rule.version.desc()).all()
-    
+
     return [RuleResponse.model_validate(v) for v in versions]
 
 
@@ -449,28 +452,29 @@ async def get_rule_version(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     root_rule_id = get_rule_root_id(rule)
-    
+
     # Find the specific version
     version = db.query(Rule).filter(
         ((Rule.id == root_rule_id) | (Rule.parent_rule_id == root_rule_id)),
         Rule.version == version_number
     ).first()
-    
+
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Version {version_number} not found"
         )
-    
+
     return RuleResponse.model_validate(version)
 
 
 @router.get("/{rule_id}/issues", response_model=List[IssueResponse])
 async def get_rule_issues(
     rule_id: str,
-    resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
+    resolved: Optional[bool] = Query(
+        None, description="Filter by resolution status"),
     limit: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
@@ -484,12 +488,12 @@ async def get_rule_issues(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rule not found"
         )
-    
+
     query = db.query(Issue).filter(Issue.rule_id == rule_id)
-    
+
     if resolved is not None:
         query = query.filter(Issue.resolved == resolved)
-    
+
     issues = query.order_by(Issue.created_at.desc()).limit(limit).all()
-    
+
     return [IssueResponse.model_validate(issue) for issue in issues]

@@ -175,17 +175,17 @@ export async function createFix(
     comment?: string;
   }
 ) {
-  const response = await apiClient.post(`/issues/${issueId}/fix/`, fixData);
+  const response = await apiClient.post(`/issues/${issueId}/fix`, fixData);
   return response.data;
 }
 
 export async function resolveIssue(issueId: string) {
-  const response = await apiClient.patch(`/issues/${issueId}/resolve/`);
+  const response = await apiClient.patch(`/issues/${issueId}/resolve`);
   return response.data;
 }
 
 export async function unresolveIssue(issueId: string) {
-  const response = await apiClient.patch(`/issues/${issueId}/unresolve/`);
+  const response = await apiClient.patch(`/issues/${issueId}/unresolve`);
   return response.data;
 }
 
@@ -231,6 +231,105 @@ export function useUnresolveIssueMutation() {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
       queryClient.invalidateQueries({ queryKey: ["issue"] });
+    },
+  });
+}
+
+// Types for dataset version and fix application
+export interface UnappliedFix {
+  fix_id: string;
+  issue_id: string;
+  row_index: number;
+  column_name: string;
+  current_value?: string;
+  new_value?: string;
+  comment?: string;
+  severity: string;
+  fixed_by?: string;
+  fixed_at?: string;
+}
+
+export interface DatasetVersion {
+  id: string;
+  dataset_id: string;
+  version_no: number;
+  created_by: string;
+  created_at: string;
+  rows?: number;
+  columns?: number;
+  change_note?: string;
+  parent_version_id?: string;
+  source?: string;
+  file_path?: string;
+}
+
+export interface ApplyFixesResponse {
+  new_version: DatasetVersion;
+  fixes_applied: number;
+  message: string;
+}
+
+// Fetch unapplied fixes for a dataset version
+export function useUnappliedFixes(versionId: string) {
+  const { isAuthenticated, hasToken } = useAuthenticatedApi();
+
+  return useQuery<UnappliedFix[]>({
+    queryKey: ["unapplied-fixes", versionId],
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<UnappliedFix[]>(
+          `/processing/datasets/versions/${versionId}/unapplied-fixes`
+        );
+        return response.data || [];
+      } catch (error) {
+        throw error;
+      }
+    },
+    enabled: isAuthenticated && hasToken && !!versionId,
+    staleTime: 5000,
+  });
+}
+
+// Apply fixes to create a new dataset version
+export async function applyFixesToDataset(
+  datasetId: string,
+  requestData: {
+    source_version_id: string;
+    fix_ids: string[];
+    version_notes?: string;
+    re_run_rules?: boolean;
+  }
+) {
+  const response = await apiClient.post<ApplyFixesResponse>(
+    `/processing/datasets/${datasetId}/versions/apply-fixes`,
+    requestData
+  );
+  return response.data;
+}
+
+// Mutation hook for applying fixes
+export function useApplyFixesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      datasetId,
+      requestData,
+    }: {
+      datasetId: string;
+      requestData: {
+        source_version_id: string;
+        fix_ids: string[];
+        version_notes?: string;
+        re_run_rules?: boolean;
+      };
+    }) => applyFixesToDataset(datasetId, requestData),
+    onSuccess: () => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      queryClient.invalidateQueries({ queryKey: ["unapplied-fixes"] });
     },
   });
 }

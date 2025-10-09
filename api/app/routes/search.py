@@ -34,7 +34,8 @@ class SearchResponse(BaseModel):
 @router.get("", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1, description="Search query"),
-    limit: int = Query(10, ge=1, le=50, description="Maximum results per category"),
+    limit: int = Query(
+        10, ge=1, le=50, description="Maximum results per category"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -202,12 +203,14 @@ async def search(
             }
         ))
 
-    total_results = len(static_suggestions) + len(datasets) + len(rules) + len(executions) + len(issues)
+    total_results = len(static_suggestions) + len(datasets) + \
+        len(rules) + len(executions) + len(issues)
 
     return SearchResponse(
         query=q,
         total_results=total_results,
-        pages=static_suggestions[:limit],  # Page suggestions in their own category
+        # Page suggestions in their own category
+        pages=static_suggestions[:limit],
         datasets=datasets,
         rules=rules,
         executions=executions,

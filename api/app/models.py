@@ -57,6 +57,12 @@ class ExportFormat(enum.Enum):
     api = "api"
     datalake = "datalake"
 
+class VersionSource(enum.Enum):
+    upload = "upload"  # Original upload
+    fixes_applied = "fixes_applied"  # Created by applying fixes
+    manual_edit = "manual_edit"  # Manual modifications
+    transformation = "transformation"  # Other transformations
+
 # Models
 class User(Base):
     __tablename__ = "users"
@@ -99,7 +105,7 @@ class Dataset(Base):
 
 class DatasetVersion(Base):
     __tablename__ = "dataset_versions"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
     version_no = Column(Integer, nullable=False)
@@ -108,13 +114,19 @@ class DatasetVersion(Base):
     rows = Column(Integer)
     columns = Column(Integer)
     change_note = Column(Text)
-    
+
+    # Track version lineage and source
+    parent_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=True)
+    source = Column(ENUM(VersionSource), default=VersionSource.upload, nullable=False)
+    file_path = Column(String)  # Path to the actual data file
+
     # Relationships
     dataset = relationship("Dataset", back_populates="versions")
     creator = relationship("User")
     executions = relationship("Execution", back_populates="dataset_version")
     exports = relationship("Export", back_populates="dataset_version")
     journal_entries = relationship("VersionJournal", back_populates="dataset_version")
+    parent_version = relationship("DatasetVersion", remote_side=[id], foreign_keys=[parent_version_id])
 
 class DatasetColumn(Base):
     __tablename__ = "dataset_columns"
@@ -233,17 +245,22 @@ class Issue(Base):
 
 class Fix(Base):
     __tablename__ = "fixes"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     issue_id = Column(String, ForeignKey("issues.id"), nullable=False)
     fixed_by = Column(String, ForeignKey("users.id"), nullable=False)
     fixed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     new_value = Column(Text)
     comment = Column(Text)
-    
+
+    # Track if and when this fix was applied to create a new dataset version
+    applied_in_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=True)
+    applied_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
     # Relationships
     issue = relationship("Issue", back_populates="fixes")
     fixer = relationship("User", back_populates="fixed_issues")
+    applied_version = relationship("DatasetVersion", foreign_keys=[applied_in_version_id])
 
 class Export(Base):
     __tablename__ = "exports"

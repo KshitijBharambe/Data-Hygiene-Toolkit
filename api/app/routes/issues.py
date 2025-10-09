@@ -13,11 +13,15 @@ router = APIRouter(prefix="/issues", tags=["Issues & Fixes"])
 
 @router.get("", response_model=List[IssueResponse])
 async def get_issues(
-    severity: Optional[Criticality] = Query(None, description="Filter by severity"),
-    resolved: Optional[bool] = Query(None, description="Filter by resolution status"),
+    severity: Optional[Criticality] = Query(
+        None, description="Filter by severity"),
+    resolved: Optional[bool] = Query(
+        None, description="Filter by resolution status"),
     rule_id: Optional[str] = Query(None, description="Filter by rule ID"),
-    dataset_id: Optional[str] = Query(None, description="Filter by dataset ID"),
-    execution_id: Optional[str] = Query(None, description="Filter by execution ID"),
+    dataset_id: Optional[str] = Query(
+        None, description="Filter by dataset ID"),
+    execution_id: Optional[str] = Query(
+        None, description="Filter by execution ID"),
     limit: int = Query(50, description="Number of issues to return"),
     offset: int = Query(0, description="Number of issues to skip"),
     db: Session = Depends(get_session),
@@ -29,7 +33,8 @@ async def get_issues(
     try:
         query = db.query(Issue).options(
             joinedload(Issue.rule),
-            joinedload(Issue.execution).joinedload(Execution.dataset_version).joinedload(DatasetVersion.dataset),
+            joinedload(Issue.execution).joinedload(
+                Execution.dataset_version).joinedload(DatasetVersion.dataset),
             joinedload(Issue.fixes)
         )
 
@@ -53,7 +58,8 @@ async def get_issues(
             )
 
         # Order by creation date (newest first) and apply pagination
-        issues = query.order_by(Issue.created_at.desc()).offset(offset).limit(limit).all()
+        issues = query.order_by(Issue.created_at.desc()).offset(
+            offset).limit(limit).all()
 
         return [
             {
@@ -100,7 +106,8 @@ async def get_issue(
     try:
         issue = db.query(Issue).options(
             joinedload(Issue.rule),
-            joinedload(Issue.execution).joinedload(Execution.dataset_version).joinedload(DatasetVersion.dataset),
+            joinedload(Issue.execution).joinedload(
+                Execution.dataset_version).joinedload(DatasetVersion.dataset),
             joinedload(Issue.fixes).joinedload(Fix.fixer)
         ).filter(Issue.id == issue_id).first()
 
@@ -191,18 +198,7 @@ async def create_fix(
         db.commit()
         db.refresh(fix)
 
-        return {
-            "id": fix.id,
-            "issue_id": fix.issue_id,
-            "new_value": fix.new_value,
-            "comment": fix.comment,
-            "fixed_at": fix.fixed_at,
-            "fixer": {
-                "id": current_user.id,
-                "name": current_user.name,
-                "email": current_user.email
-            }
-        }
+        return FixResponse.model_validate(fix)
 
     except Exception as e:
         db.rollback()
@@ -227,9 +223,12 @@ async def get_issues_summary(
 
         # Total counts
         total_issues = db.query(Issue).count()
-        recent_issues = db.query(Issue).filter(Issue.created_at >= start_date).count()
-        resolved_issues = db.query(Issue).filter(Issue.resolved == True).count()
-        unresolved_issues = db.query(Issue).filter(Issue.resolved == False).count()
+        recent_issues = db.query(Issue).filter(
+            Issue.created_at >= start_date).count()
+        resolved_issues = db.query(Issue).filter(
+            Issue.resolved == True).count()
+        unresolved_issues = db.query(Issue).filter(
+            Issue.resolved == False).count()
 
         # Issues by severity
         severity_counts = {}
@@ -241,8 +240,10 @@ async def get_issues_summary(
         issues_by_day = {}
         for i in range(days):
             day = (datetime.now(timezone.utc) - timedelta(days=i)).date()
-            day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
-            day_end = datetime.combine(day, datetime.max.time(), tzinfo=timezone.utc)
+            day_start = datetime.combine(
+                day, datetime.min.time(), tzinfo=timezone.utc)
+            day_end = datetime.combine(
+                day, datetime.max.time(), tzinfo=timezone.utc)
 
             daily_count = db.query(Issue).filter(
                 Issue.created_at >= day_start,
