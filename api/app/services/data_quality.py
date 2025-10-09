@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 
 from app.models import (
     Dataset, DatasetVersion, DatasetColumn, Issue, Fix, Execution,
-    DatasetStatus, User, SourceType
+    DatasetStatus, User, SourceType, VersionSource
 )
 from app.schemas import FixCreate, FixResponse
 from app.services.data_import import DataImportService
@@ -482,7 +482,7 @@ class DataQualityService:
         latest_version = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_id)
-            .order_by(DatasetVersion.version_number.desc())
+            .order_by(DatasetVersion.version_no.desc())
             .first()
         )
 
@@ -493,7 +493,7 @@ class DataQualityService:
             )
 
         # Load the dataframe
-        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_no)
 
         corrections_applied = 0
         errors = []
@@ -525,7 +525,7 @@ class DataQualityService:
 
         # Save the corrected dataset as a new version
         if corrections_applied > 0:
-            new_version_number = latest_version.version_number + 1
+            new_version_number = latest_version.version_no + 1
             file_path = self.data_import_service.save_dataset_file(
                 dataset_id, df, new_version_number
             )
@@ -533,11 +533,13 @@ class DataQualityService:
             # Create new dataset version record
             new_version = DatasetVersion(
                 dataset_id=dataset_id,
-                version_number=new_version_number,
+                version_no=new_version_number,
                 file_path=file_path,
-                row_count=len(df),
-                column_count=len(df.columns),
-                notes=f"Applied {corrections_applied} manual corrections"
+                rows=len(df),
+                columns=len(df.columns),
+                change_note=f"Applied {corrections_applied} manual corrections",
+                created_by=user_id,
+                source=VersionSource.manual_edit
             )
             self.db.add(new_version)
             self.db.commit()
@@ -562,12 +564,24 @@ class DataQualityService:
         latest_version = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_id)
-            .order_by(DatasetVersion.version_number.desc())
+            .order_by(DatasetVersion.version_no.desc())
             .first()
         )
 
+        if not latest_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No dataset version found for dataset {dataset_id}"
+            )
+
         # Load the dataframe for analysis
-        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        try:
+            df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_no)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to load dataset file: {str(e)}"
+            )
 
         # Get execution history and issues
         executions = (
@@ -576,7 +590,8 @@ class DataQualityService:
             .all()
         )
 
-        total_issues = sum(exec.issues_found for exec in executions if exec.issues_found)
+        # Calculate total issues from execution issues relationship
+        total_issues = sum(len(exec.issues) for exec in executions)
         total_fixes = (
             self.db.query(Fix)
             .join(Issue)
@@ -590,10 +605,10 @@ class DataQualityService:
         return {
             "dataset_id": dataset_id,
             "dataset_name": dataset.name,
-            "current_version": latest_version.version_number,
+            "current_version": latest_version.version_no,
             "total_rows": len(df),
             "total_columns": len(df.columns),
-            "missing_data_percentage": float((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100),
+            "missing_data_percentage": float((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100) if len(df) * len(df.columns) > 0 else 0,
             "duplicate_rows": int(df.duplicated().sum()),
             "total_issues_found": total_issues,
             "total_fixes_applied": total_fixes,
@@ -601,8 +616,8 @@ class DataQualityService:
             "column_quality": self._analyze_column_quality(df),
             "execution_summary": {
                 "total_executions": len(executions),
-                "last_execution": executions[-1].created_at if executions else None,
-                "success_rate": len([e for e in executions if e.status == "succeeded"]) / len(executions) * 100 if executions else 0
+                "last_execution": executions[-1].started_at if executions else None,
+                "success_rate": len([e for e in executions if e.status.value == "succeeded"]) / len(executions) * 100 if executions else 0
             }
         }
 

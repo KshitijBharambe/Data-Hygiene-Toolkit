@@ -421,6 +421,107 @@ class ApiClient {
     return response.data;
   }
 
+  // Quality Reports endpoints
+  async getQualitySummary(datasetId: string): Promise<unknown> {
+    const response = await this.client.get(
+      `/reports/datasets/${datasetId}/quality-summary`
+    );
+    return response.data;
+  }
+
+  async generateQualityReport(
+    datasetId: string,
+    includeCharts: boolean = false
+  ): Promise<{
+    export_id: string;
+    dataset_id: string;
+    dataset_name: string;
+    report_type: string;
+    file_path: string;
+    download_url: string;
+    include_charts: boolean;
+  }> {
+    const response = await this.client.post(
+      `/reports/datasets/${datasetId}/quality-report`,
+      null,
+      {
+        params: { include_charts: includeCharts },
+      }
+    );
+    return response.data;
+  }
+
+  async getQualityTrends(days: number = 30): Promise<unknown> {
+    const response = await this.client.get("/reports/analytics/quality-trends", {
+      params: { days },
+    });
+    return response.data;
+  }
+
+  async getIssuePatterns(): Promise<unknown> {
+    const response = await this.client.get("/reports/analytics/issue-patterns");
+    return response.data;
+  }
+
+  // Export Data endpoints
+  async exportDataset(
+    datasetId: string,
+    format: string,
+    includeMetadata: boolean = true,
+    includeIssues: boolean = false,
+    executionId?: string
+  ): Promise<{
+    export_id: string;
+    dataset_id: string;
+    dataset_name: string;
+    version_number: number;
+    export_format: string;
+    file_path: string;
+    include_metadata: boolean;
+    include_issues: boolean;
+    download_url: string;
+  }> {
+    const response = await this.client.post(
+      `/reports/datasets/${datasetId}/export`,
+      null,
+      {
+        params: {
+          export_format: format,
+          include_metadata: includeMetadata,
+          include_issues: includeIssues,
+          execution_id: executionId,
+        },
+      }
+    );
+    return response.data;
+  }
+
+  async getExportHistory(datasetId: string): Promise<{
+    dataset_id: string;
+    dataset_name: string;
+    total_exports: number;
+    exports: unknown[];
+  }> {
+    const response = await this.client.get(
+      `/reports/datasets/${datasetId}/export-history`
+    );
+    return response.data;
+  }
+
+  async downloadExportFile(exportId: string): Promise<Blob> {
+    const response = await this.client.get(
+      `/reports/exports/${exportId}/download`,
+      {
+        responseType: "blob",
+      }
+    );
+    return response.data;
+  }
+
+  async deleteExport(exportId: string): Promise<void> {
+    await this.client.delete(`/reports/exports/${exportId}`);
+  }
+
   // User management endpoints (admin only)
   async getUsers(): Promise<User[]> {
     const response = await this.client.get<User[]>("/auth/users");

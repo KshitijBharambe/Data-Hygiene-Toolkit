@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import json
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_session
 from app.models import (
@@ -55,7 +56,7 @@ async def export_dataset(
     latest_version = (
         db.query(DatasetVersion)
         .filter(DatasetVersion.dataset_id == dataset_id)
-        .order_by(DatasetVersion.version_number.desc())
+        .order_by(DatasetVersion.version_no.desc())
         .first()
     )
 
@@ -80,7 +81,7 @@ async def export_dataset(
             "export_id": export_id,
             "dataset_id": dataset_id,
             "dataset_name": dataset.name,
-            "version_number": latest_version.version_number,
+            "version_number": latest_version.version_no,
             "export_format": export_format.value,
             "file_path": file_path,
             "include_metadata": include_metadata,
@@ -345,7 +346,7 @@ async def get_dashboard_overview(
                         "dataset_version_id": execution.dataset_version_id,
                         "status": execution.status.value,
                         "issues_found": len(execution.issues) if execution.issues else 0,
-                        "created_at": execution.started_at
+                        "started_at": execution.started_at
                     }
                     for execution in recent_executions
                 ]
@@ -377,23 +378,21 @@ async def get_quality_trends(
     """
     Get data quality trends over time
     """
-    from datetime import datetime, timedelta
-
     try:
         # Get executions from the last N days
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
         executions = (
             db.query(Execution)
-            .filter(Execution.created_at >= start_date)
-            .order_by(Execution.created_at.asc())
+            .filter(Execution.started_at >= start_date)
+            .order_by(Execution.started_at.asc())
             .all()
         )
 
         # Group by date
         trends = {}
         for execution in executions:
-            date_key = execution.created_at.date().isoformat()
+            date_key = execution.started_at.date().isoformat()
 
             if date_key not in trends:
                 trends[date_key] = {
@@ -405,16 +404,18 @@ async def get_quality_trends(
                 }
 
             trends[date_key]["total_executions"] += 1
-            trends[date_key]["total_issues"] += execution.issues_found or 0
+            trends[date_key]["total_issues"] += len(execution.issues) if execution.issues else 0
 
             if execution.status.value == "succeeded":
                 trends[date_key]["successful_executions"] += 1
 
-            if execution.duration_seconds:
+            # Calculate duration from started_at and finished_at
+            if execution.finished_at and execution.started_at:
+                duration = (execution.finished_at - execution.started_at).total_seconds()
                 current_avg = trends[date_key]["avg_execution_time"]
                 count = trends[date_key]["total_executions"]
                 trends[date_key]["avg_execution_time"] = (
-                    (current_avg * (count - 1) + execution.duration_seconds) / count
+                    (current_avg * (count - 1) + duration) / count
                 )
 
         # Calculate success rates
@@ -433,9 +434,9 @@ async def get_quality_trends(
             "trends": list(trends.values()),
             "summary": {
                 "total_executions": len(executions),
-                "total_issues_found": sum(e.issues_found or 0 for e in executions),
+                "total_issues_found": sum(len(e.issues) if e.issues else 0 for e in executions),
                 "avg_issues_per_execution": (
-                    sum(e.issues_found or 0 for e in executions) / len(executions)
+                    sum(len(e.issues) if e.issues else 0 for e in executions) / len(executions)
                     if executions else 0
                 ),
                 "overall_success_rate": (
@@ -502,15 +503,15 @@ async def get_issue_patterns(
                     patterns["by_rule_type"][rule_type] = patterns["by_rule_type"].get(
                         rule_type, 0) + 1
 
-        # Most common issue descriptions
-        description_counts = {}
+        # Most common issue messages
+        message_counts = {}
         for issue in issues:
-            desc = issue.description or "No description"
-            description_counts[desc] = description_counts.get(desc, 0) + 1
+            msg = issue.message or "No message"
+            message_counts[msg] = message_counts.get(msg, 0) + 1
 
         patterns["most_common_issues"] = [
-            {"description": desc, "count": count}
-            for desc, count in sorted(description_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            {"message": msg, "count": count}
+            for msg, count in sorted(message_counts.items(), key=lambda x: x[1], reverse=True)[:10]
         ]
 
         # Fix rates by severity
@@ -591,12 +592,11 @@ async def get_system_health(
             export_storage_size = 0
 
         # Recent activity health
-        from datetime import datetime, timedelta, timezone
         recent_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
 
         recent_activity = {
             "recent_uploads": db.query(Dataset).filter(Dataset.uploaded_at >= recent_threshold).count(),
-            "recent_executions": db.query(Execution).filter(Execution.created_at >= recent_threshold).count(),
+            "recent_executions": db.query(Execution).filter(Execution.started_at >= recent_threshold).count(),
             "recent_exports": db.query(Export).filter(Export.created_at >= recent_threshold).count()
         }
 
@@ -653,8 +653,6 @@ def _get_avg_execution_time(db: Session) -> float:
 
 def _get_success_rate(db: Session) -> float:
     """Get success rate from recent executions"""
-    from datetime import datetime, timedelta
-
     recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
     recent_executions = (
         db.query(Execution)

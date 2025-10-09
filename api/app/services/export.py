@@ -71,13 +71,13 @@ class ExportService:
         # Load the dataset
         df = self.data_import_service.load_dataset_file(
             dataset_version.dataset_id,
-            dataset_version.version_number
+            dataset_version.version_no
         )
 
         # Generate export filename
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_version.dataset_id).first()
-        base_filename = f"{dataset.name}_v{dataset_version.version_number}_{timestamp}"
+        base_filename = f"{dataset.name}_v{dataset_version.version_no}_{timestamp}"
 
         # Export based on format
         if export_format == ExportFormat.csv:
@@ -228,7 +228,7 @@ class ExportService:
         all_versions = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_version.dataset_id)
-            .order_by(DatasetVersion.version_number.asc())
+            .order_by(DatasetVersion.version_no.asc())
             .all()
         )
 
@@ -248,17 +248,17 @@ class ExportService:
             "uploaded_at": dataset.uploaded_at,
             "current_status": dataset.status.value,
             "version_info": {
-                "version_number": dataset_version.version_number,
+                "version_number": dataset_version.version_no,
                 "created_at": dataset_version.created_at,
-                "row_count": dataset_version.row_count,
-                "column_count": dataset_version.column_count,
-                "notes": dataset_version.notes,
+                "row_count": dataset_version.rows,
+                "column_count": dataset_version.columns,
+                "notes": dataset_version.change_note,
                 "total_versions": len(all_versions)
             },
             "processing_history": {
                 "total_executions": len(executions),
-                "total_issues_found": sum(e.issues_found or 0 for e in executions),
-                "last_execution": executions[-1].created_at if executions else None
+                "total_issues_found": sum(len(e.issues) for e in executions),
+                "last_execution": executions[-1].started_at if executions else None
             },
             "export_info": {
                 "exported_at": datetime.now(timezone.utc),
@@ -329,9 +329,9 @@ class ExportService:
                 "row_index": issue.row_index,
                 "column_name": issue.column_name,
                 "current_value": issue.current_value,
-                "expected_value": issue.expected_value,
+                "suggested_value": issue.suggested_value,
                 "severity": issue.severity.value if issue.severity else None,
-                "description": issue.description,
+                "message": issue.message,
                 "created_at": issue.created_at,
                 "is_fixed": len(fixes) > 0,
                 "fix_count": len(fixes),
@@ -376,7 +376,7 @@ class ExportService:
                 "format": export.format.value,
                 "created_at": export.created_at,
                 "created_by": creator.name if creator else "Unknown",
-                "dataset_version": version.version_number if version else None,
+                "dataset_version": version.version_no if version else None,
                 "location": export.location,
                 "execution_id": export.execution_id,
                 "file_exists": Path(export.location).exists() if export.location else False
@@ -409,7 +409,7 @@ class ExportService:
 
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_version.dataset_id).first()
 
-        download_filename = f"{dataset.name}_v{dataset_version.version_number}.{export.format.value}"
+        download_filename = f"{dataset.name}_v{dataset_version.version_no}.{export.format.value}"
 
         return export.location, download_filename
 
@@ -471,12 +471,12 @@ class ExportService:
         latest_version = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_id)
-            .order_by(DatasetVersion.version_number.desc())
+            .order_by(DatasetVersion.version_no.desc())
             .first()
         )
 
         # Load dataset
-        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_no)
 
         # Generate comprehensive report
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -522,13 +522,20 @@ class ExportService:
             if executions:
                 exec_data = []
                 for exec in executions:
+                    duration = 0
+                    if exec.finished_at and exec.started_at:
+                        duration = (exec.finished_at - exec.started_at).total_seconds()
+
+                    # Remove timezone for Excel compatibility
+                    created_at = exec.started_at.replace(tzinfo=None) if exec.started_at else None
+
                     exec_data.append({
                         "Execution ID": exec.id,
-                        "Created At": exec.created_at,
+                        "Created At": created_at,
                         "Status": exec.status.value,
-                        "Rules Executed": exec.rules_executed or 0,
-                        "Issues Found": exec.issues_found or 0,
-                        "Duration (seconds)": exec.duration_seconds or 0
+                        "Rules Executed": exec.total_rules or 0,
+                        "Issues Found": len(exec.issues),
+                        "Duration (seconds)": duration
                     })
 
                 exec_df = pd.DataFrame(exec_data)
@@ -564,9 +571,13 @@ class ExportService:
         uniqueness = (1 - df.duplicated().sum() / len(df)) * 100 if len(df) > 0 else 100
         overall_quality = (completeness + uniqueness) / 2
 
+        # Remove timezone info for Excel compatibility
+        last_updated = version.created_at.replace(tzinfo=None) if version.created_at else None
+        report_generated = datetime.now(timezone.utc).replace(tzinfo=None)
+
         return {
             "Dataset Name": dataset.name,
-            "Current Version": version.version_number,
+            "Current Version": version.version_no,
             "Total Rows": len(df),
             "Total Columns": len(df.columns),
             "Total Data Points": total_cells,
@@ -577,8 +588,8 @@ class ExportService:
             "Data Completeness Score": round(completeness, 2),
             "Data Uniqueness Score": round(uniqueness, 2),
             "Overall Quality Score": round(overall_quality, 2),
-            "Last Updated": version.created_at,
-            "Report Generated": datetime.now(timezone.utc)
+            "Last Updated": last_updated,
+            "Report Generated": report_generated
         }
 
     def _generate_detailed_column_analysis(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:

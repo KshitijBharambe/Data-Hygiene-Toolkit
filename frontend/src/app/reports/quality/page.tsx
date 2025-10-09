@@ -14,15 +14,95 @@ import {
   CheckCircle,
   Download,
   FileText,
-  Database
+  Database,
+  Loader2
 } from 'lucide-react'
 import { useDatasets } from '@/lib/hooks/useDatasets'
+import {
+  useQualitySummary,
+  useIssuePatterns,
+  useGenerateQualityReport,
+  useDownloadExport
+} from '@/lib/hooks/useReports'
+import { toast } from 'sonner'
+
+type QualitySummaryResponse = {
+  dataset_id: string;
+  dataset_name: string;
+  current_version: number;
+  total_rows: number;
+  total_columns: number;
+  missing_data_percentage: number;
+  duplicate_rows: number;
+  total_issues_found: number;
+  total_fixes_applied: number;
+  data_quality_score: number;
+  column_quality: Record<string, unknown>;
+  execution_summary: {
+    total_executions: number;
+    last_execution: string | null;
+    success_rate: number;
+  };
+} | undefined;
+
+type IssuePatternsResponse = {
+  total_issues_analyzed: number;
+  patterns: {
+    by_severity: Record<string, number>;
+    by_column: Record<string, number>;
+    by_rule_type: Record<string, number>;
+    most_common_issues: { description: string; count: number }[];
+    fix_rates: Record<string, number>;
+  };
+  insights: {
+    most_problematic_columns: [string, number][];
+    most_common_rule_violations: [string, number][];
+  };
+} | undefined;
 
 export default function QualityReportsPage() {
   const [selectedDataset, setSelectedDataset] = useState<string>('')
   const [timeRange, setTimeRange] = useState<string>('30')
   const { data: datasetsData } = useDatasets()
   const datasets = datasetsData?.items || []
+
+  // Fetch data based on selected dataset and time range
+  const { data: qualitySummary, isLoading: isLoadingQuality } = useQualitySummary(selectedDataset)
+  const summaryData = qualitySummary as QualitySummaryResponse
+  const { data: issuePatterns, isLoading: isLoadingPatterns } = useIssuePatterns()
+  const patternsData = issuePatterns as IssuePatternsResponse
+  const generateReport = useGenerateQualityReport()
+  const downloadExport = useDownloadExport()
+
+  const handleGenerateReport = async () => {
+    if (!selectedDataset) {
+      toast.error('Please select a dataset')
+      return
+    }
+
+    try {
+      const result = await generateReport.mutateAsync({
+        datasetId: selectedDataset,
+        includeCharts: false
+      })
+
+      toast.success('Quality report generated successfully')
+
+      // Automatically download the report
+      const blob = await downloadExport.mutateAsync(result.export_id)
+      const url = window.URL.createObjectURL(blob.blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${result.dataset_name}_quality_report.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } } };
+      toast.error(err.response?.data?.detail || 'Failed to generate report')
+    }
+  }
 
   return (
     <MainLayout>
@@ -75,9 +155,22 @@ export default function QualityReportsPage() {
               </Select>
             </div>
             <div className="flex items-end">
-              <Button className="w-full">
-                <FileText className="mr-2 h-4 w-4" />
-                Generate Report
+              <Button
+                className="w-full"
+                onClick={handleGenerateReport}
+                disabled={!selectedDataset || generateReport.isPending || downloadExport.isPending}
+              >
+                {(generateReport.isPending || downloadExport.isPending) ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Generate Report
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -94,68 +187,90 @@ export default function QualityReportsPage() {
 
         <TabsContent value="overview" className="space-y-4">
           {/* Quality Score Overview */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Overall Quality Score
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">87.3%</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
-                  +2.1% from last period
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Issues
-                </CardTitle>
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">156</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  <AlertTriangle className="mr-1 h-3 w-3 text-orange-500" />
-                  23 critical
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Resolution Rate
-                </CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">78.3%</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
-                  122 resolved
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Data Completeness
-                </CardTitle>
-                <Database className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">94.7%</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-1">
-                  <Database className="mr-1 h-3 w-3 text-blue-500" />
-                  5.3% missing
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          {isLoadingQuality ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : summaryData ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Overall Quality Score
+                    </CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {summaryData.data_quality_score?.toFixed(1) || 0}%
+                    </div>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                      Quality assessment
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Total Issues
+                    </CardTitle>
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{summaryData.total_issues_found || 0}</div>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <AlertTriangle className="mr-1 h-3 w-3 text-orange-500" />
+                      From {summaryData.execution_summary.total_executions} executions
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Fixes Applied
+                    </CardTitle>
+                    <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{summaryData.total_fixes_applied || 0}</div>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
+                      {summaryData.total_issues_found > 0
+                        ? ((summaryData.total_fixes_applied / summaryData.total_issues_found) * 100).toFixed(1)
+                        : 0}% resolved
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Data Completeness
+                    </CardTitle>
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {(100 - summaryData.missing_data_percentage).toFixed(1)}%
+                    </div>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <Database className="mr-1 h-3 w-3 text-blue-500" />
+                      {summaryData.missing_data_percentage.toFixed(1)}% missing
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : selectedDataset ? (
+            <div className="text-center p-8 text-muted-foreground">
+              No quality data available for this dataset
+            </div>
+          ) : (
+            <div className="text-center p-8 text-muted-foreground">
+              Select a dataset to view quality metrics
+            </div>
+          )}
 
           {/* Quality by Dataset */}
           <Card>
@@ -251,63 +366,50 @@ export default function QualityReportsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Issues by Severity</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="destructive" className="w-2 h-2 p-0 rounded-full" />
-                        <span className="text-sm">Critical</span>
-                      </div>
-                      <span className="text-sm font-medium">23</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge className="w-2 h-2 p-0 rounded-full bg-orange-500" />
-                        <span className="text-sm">High</span>
-                      </div>
-                      <span className="text-sm font-medium">45</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge className="w-2 h-2 p-0 rounded-full bg-yellow-500" />
-                        <span className="text-sm">Medium</span>
-                      </div>
-                      <span className="text-sm font-medium">67</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="w-2 h-2 p-0 rounded-full" />
-                        <span className="text-sm">Low</span>
-                      </div>
-                      <span className="text-sm font-medium">21</span>
+              {isLoadingPatterns ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : patternsData && patternsData.patterns ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Issues by Severity</h4>
+                    <div className="space-y-2">
+                      {Object.entries(patternsData.patterns.by_severity || {}).map(([severity, count]: [string, number]) => (
+                        <div key={severity} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={severity === 'critical' ? 'destructive' : 'outline'}
+                              className={`w-2 h-2 p-0 rounded-full ${
+                                severity === 'high' ? 'bg-orange-500' :
+                                severity === 'medium' ? 'bg-yellow-500' : ''
+                              }`}
+                            />
+                            <span className="text-sm capitalize">{severity}</span>
+                          </div>
+                          <span className="text-sm font-medium">{count}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  <h4 className="font-medium">Issues by Type</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Missing Data</span>
-                      <span className="text-sm font-medium">89</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Format Issues</span>
-                      <span className="text-sm font-medium">34</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Value Range</span>
-                      <span className="text-sm font-medium">21</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm">Duplicates</span>
-                      <span className="text-sm font-medium">12</span>
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Issues by Rule Type</h4>
+                    <div className="space-y-2">
+                      {Object.entries(patternsData.patterns.by_rule_type || {}).map(([type, count]: [string, number]) => (
+                        <div key={type} className="flex items-center justify-between">
+                          <span className="text-sm capitalize">{type.replace(/_/g, ' ')}</span>
+                          <span className="text-sm font-medium">{count}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="text-center p-8 text-muted-foreground">
+                  No issue patterns available
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
