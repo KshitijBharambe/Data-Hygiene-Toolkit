@@ -16,6 +16,9 @@ COPY api/app/ ./app
 COPY api/migrations/ ./migrations
 COPY api/migrations/alembic.ini ./alembic.ini
 
+# Create data directories
+RUN mkdir -p /api/data/exports /api/data/datasets && chmod -R 777 /api/data
+
 # Set PYTHONPATH
 ENV PYTHONPATH=/api
 

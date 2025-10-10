@@ -280,7 +280,7 @@ class Export(Base):
 
 class VersionJournal(Base):
     __tablename__ = "version_journal"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     dataset_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=False)
     event = Column(String, nullable=False)
@@ -288,6 +288,25 @@ class VersionJournal(Base):
     columns_affected = Column(Integer)
     details = Column(Text)
     occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    
+
     # Relationships
     dataset_version = relationship("DatasetVersion", back_populates="journal_entries")
+
+class DataQualityMetrics(Base):
+    __tablename__ = "data_quality_metrics"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey("executions.id", ondelete="CASCADE"), nullable=False, unique=True)
+    dataset_version_id = Column(String, ForeignKey("dataset_versions.id", ondelete="CASCADE"), nullable=False)
+    dqi = Column(Integer, nullable=False, default=0)
+    clean_rows_pct = Column(Integer, nullable=False, default=0)
+    hybrid = Column(Integer, nullable=False, default=0)
+    status = Column(String, nullable=False, default="not_available")
+    message = Column(Text)
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    execution = relationship("Execution")
+    dataset_version = relationship("DatasetVersion")

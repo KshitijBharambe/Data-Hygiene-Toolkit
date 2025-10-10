@@ -58,7 +58,7 @@ import {
 import React from "react";
 import { FixDialog } from "@/components/issues/fix-dialog";
 import { BulkFixDialog } from "@/components/issues/bulk-fix-dialog";
-import { formatDate, formatDateTime } from "@/lib/utils/date";
+import { formatDate, formatDateTime, isValidDate } from "@/lib/utils/date";
 
 export default function IssuesPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -353,14 +353,14 @@ export default function IssuesPage() {
       case "rule_z_to_a":
         return (b.rule_name || "").localeCompare(a.rule_name || "");
       case "created_at_oldest":
-        return (
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
+        const aTime = isValidDate(a.created_at) ? new Date(a.created_at).getTime() : 0;
+        const bTime = isValidDate(b.created_at) ? new Date(b.created_at).getTime() : 0;
+        return aTime - bTime;
       case "created_at_newest":
       default:
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        const aTimeNewest = isValidDate(a.created_at) ? new Date(a.created_at).getTime() : 0;
+        const bTimeNewest = isValidDate(b.created_at) ? new Date(b.created_at).getTime() : 0;
+        return bTimeNewest - aTimeNewest;
     }
   });
 

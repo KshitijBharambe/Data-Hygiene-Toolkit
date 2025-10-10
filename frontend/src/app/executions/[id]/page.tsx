@@ -34,6 +34,7 @@ import {
   useExecutionSummary,
   useExecutionIssues,
   useCancelExecution,
+  useExecutionQualityMetrics,
 } from "@/lib/hooks/useExecutions";
 import { Issue } from "@/lib/hooks/useIssues";
 import {
@@ -52,8 +53,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ExecutionStatus, Criticality } from "@/types/api";
-import { format, formatDistanceToNow } from "date-fns";
-import { formatDateInTimezone, getUserTimezone } from "@/lib/utils/date";
+import { formatDate, formatRelativeTime, formatDateInTimezone, getUserTimezone, isValidDate } from "@/lib/utils/date";
+import { QualityMetricsCompact } from "@/components/QualityMetrics";
 
 const statusColors: Record<ExecutionStatus, string> = {
   queued: "bg-gray-100 text-gray-800",
@@ -196,9 +197,7 @@ function RuleSnapshotDialog({ ruleSnapshot }: { ruleSnapshot: string | null | un
             <div className="space-y-1 p-3 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium text-muted-foreground">Created At</p>
               <p className="text-sm">
-                {ruleData.created_at
-                  ? format(new Date(ruleData.created_at), 'MMM d, yyyy HH:mm:ss')
-                  : 'Unknown'}
+                {formatDate(ruleData.created_at, 'MMM d, yyyy HH:mm:ss', 'Unknown')}
               </p>
             </div>
 
@@ -272,6 +271,8 @@ export default function ExecutionDetailPage() {
     useExecutionSummary(executionId);
   const { data: issuesData, isLoading: issuesLoading } =
     useExecutionIssues(executionId);
+  const { data: qualityMetrics, isLoading: metricsLoading } =
+    useExecutionQualityMetrics(executionId);
   const cancelExecution = useCancelExecution();
 
   const handleCancel = () => {
@@ -316,7 +317,8 @@ export default function ExecutionDetailPage() {
       return Math.round(summary.duration_seconds);
     }
     // Fallback to calculating from timestamps
-    if (execution.finished_at && execution.started_at) {
+    if (execution.finished_at && execution.started_at &&
+        isValidDate(execution.finished_at) && isValidDate(execution.started_at)) {
       return Math.round(
         (new Date(execution.finished_at).getTime() -
           new Date(execution.started_at).getTime()) /
@@ -358,6 +360,12 @@ export default function ExecutionDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Quality Metrics - Prominent Display */}
+        <QualityMetricsCompact
+          metrics={qualityMetrics}
+          isLoading={metricsLoading}
+        />
 
         {/* Compact Overview */}
         <Card>
@@ -417,11 +425,11 @@ export default function ExecutionDetailPage() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>Started: {formatDateInTimezone(new Date(execution.started_at), userTimezone, "MMM d, HH:mm:ss")}</span>
+                  <span>Started: {formatDateInTimezone(execution.started_at, userTimezone, "MMM d, HH:mm:ss")}</span>
                 </div>
                 {execution.finished_at && (
                   <span className="text-muted-foreground">
-                    Finished: {formatDateInTimezone(new Date(execution.finished_at), userTimezone, "MMM d, HH:mm:ss")}
+                    Finished: {formatDateInTimezone(execution.finished_at, userTimezone, "MMM d, HH:mm:ss")}
                   </span>
                 )}
               </div>
@@ -430,9 +438,7 @@ export default function ExecutionDetailPage() {
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Processing...</span>
                     <span>
-                      {formatDistanceToNow(new Date(execution.started_at), {
-                        addSuffix: true,
-                      })}
+                      {formatRelativeTime(execution.started_at)}
                     </span>
                   </div>
                   <Progress value={undefined} className="animate-pulse h-1.5" />

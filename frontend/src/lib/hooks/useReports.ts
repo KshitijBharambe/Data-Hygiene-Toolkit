@@ -34,6 +34,13 @@ export function useIssuePatterns() {
   })
 }
 
+export function useAllDatasetsQualityScores() {
+  return useQuery({
+    queryKey: ['all-datasets-quality-scores'],
+    queryFn: () => apiClient.getAllDatasetsQualityScores(),
+  })
+}
+
 export function useGenerateQualityReport() {
   const queryClient = useQueryClient()
 

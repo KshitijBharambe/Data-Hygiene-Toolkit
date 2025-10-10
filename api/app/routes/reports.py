@@ -77,12 +77,16 @@ async def export_dataset(
             include_issues=include_issues
         )
 
+        # Determine actual file extension based on file path
+        actual_extension = file_path.split('.')[-1]  # Gets 'csv', 'zip', 'xlsx', etc.
+        
         return {
             "export_id": export_id,
             "dataset_id": dataset_id,
             "dataset_name": dataset.name,
             "version_number": latest_version.version_no,
             "export_format": export_format.value,
+            "actual_file_extension": actual_extension,  # NEW: tells frontend the real extension
             "file_path": file_path,
             "include_metadata": include_metadata,
             "include_issues": include_issues,
@@ -151,6 +155,11 @@ async def download_export(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Export file not found"
             )
+        
+        # Debug: Check file size
+        file_size = Path(file_path).stat().st_size
+        print(f"[DEBUG] Downloading file: {file_path}")
+        print(f"[DEBUG] File size: {file_size} bytes ({file_size / 1024:.2f} KB)")
 
         # Determine media type
         if file_path.endswith('.csv'):
@@ -298,14 +307,14 @@ async def get_dashboard_overview(
             .all()
         )
 
-        # Quality statistics
+        # Quality statistics (optimized - from database only)
         datasets = db.query(Dataset).all()
         quality_scores = []
 
         for dataset in datasets:
             try:
                 data_quality_service = DataQualityService(db)
-                summary = data_quality_service.create_data_quality_summary(
+                summary = data_quality_service.create_data_quality_summary_from_db(
                     dataset.id)
                 quality_scores.append(summary.get("data_quality_score", 0))
             except:
@@ -451,6 +460,88 @@ async def get_quality_trends(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate quality trends: {str(e)}"
+        )
+
+
+@router.get("/datasets/quality-scores")
+async def get_all_datasets_quality_scores(
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get quality scores for all datasets (optimized - uses DB aggregation only)
+    """
+    try:
+        datasets = db.query(Dataset).all()
+        quality_scores = []
+
+        for dataset in datasets:
+            try:
+                # Get latest version for row count
+                latest_version = (
+                    db.query(DatasetVersion)
+                    .filter(DatasetVersion.dataset_id == dataset.id)
+                    .order_by(DatasetVersion.version_no.desc())
+                    .first()
+                )
+
+                if not latest_version:
+                    continue
+
+                # Get all executions for this dataset
+                executions = (
+                    db.query(Execution)
+                    .filter(Execution.dataset_version_id == latest_version.id)
+                    .all()
+                )
+
+                # Calculate metrics from database
+                total_issues = sum(len(exec.issues) for exec in executions if exec.issues)
+                
+                # Get total fixes for this dataset's issues
+                execution_ids = [e.id for e in executions]
+                total_fixes = (
+                    db.query(Fix)
+                    .join(Issue)
+                    .filter(Issue.execution_id.in_(execution_ids))
+                    .count()
+                ) if execution_ids else 0
+
+                # Calculate quality score based on issue/fix ratio
+                # If no executions have been run, we can't determine quality
+                if len(executions) == 0:
+                    quality_score = 0.0  # No data to calculate quality
+                elif total_issues == 0:
+                    quality_score = 100.0  # No issues found = perfect quality
+                else:
+                    fix_rate = (total_fixes / total_issues) * 100 if total_issues > 0 else 0
+                    # Score: 100 - (issues per 100 rows) + (fix rate bonus)
+                    issues_per_100_rows = (total_issues / latest_version.rows * 100) if latest_version.rows > 0 else total_issues
+                    quality_score = max(0, min(100, 100 - issues_per_100_rows + (fix_rate * 0.2)))
+
+                quality_scores.append({
+                    "id": dataset.id,
+                    "name": dataset.name,
+                    "quality_score": round(quality_score, 1),
+                    "total_rows": latest_version.rows,
+                    "total_issues": total_issues,
+                    "total_fixes": total_fixes,
+                    "status": dataset.status.value
+                })
+            except Exception as e:
+                # If we can't get quality data for a dataset, log and skip it
+                print(f"Warning: Could not get quality data for dataset {dataset.id}: {str(e)}")
+                continue
+
+        return {
+            "datasets": quality_scores,
+            "total_datasets": len(quality_scores)
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality scores: {str(e)}"
         )
 
 

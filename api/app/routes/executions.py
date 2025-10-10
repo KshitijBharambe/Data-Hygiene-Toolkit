@@ -12,9 +12,10 @@ from app.models import (
 )
 from app.auth import get_any_authenticated_user, get_admin_user
 from app.schemas import (
-    ExecutionResponse, ExecutionCreate, IssueResponse
+    ExecutionResponse, ExecutionCreate, IssueResponse, QualityMetricsResponse
 )
 from app.services.rule_engine import RuleEngineService
+from app.services.data_quality import DataQualityService
 
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
 
@@ -409,3 +410,23 @@ async def get_execution_rules(
         result.append(rule_info)
 
     return result
+
+
+@router.get("/{execution_id}/quality-metrics", response_model=QualityMetricsResponse)
+async def get_execution_quality_metrics(
+    execution_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get or compute comprehensive data quality metrics for an execution.
+
+    Returns three key metrics:
+    - DQI (Data Quality Index): Weighted constraint satisfaction score (0-100)
+    - CleanRowsPct: Percentage of rows without any issues (0-100)
+    - Hybrid: Harmonic mean of DQI and CleanRowsPct (0-100)
+
+    Metrics are cached after first computation.
+    """
+    quality_service = DataQualityService(db)
+    return quality_service.compute_quality_metrics(execution_id)

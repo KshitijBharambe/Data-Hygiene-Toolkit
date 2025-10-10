@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/lib/api";
-import { Execution, ExecutionCreate, PaginatedResponse } from "@/types/api";
+import { Execution, ExecutionCreate, PaginatedResponse, QualityMetrics } from "@/types/api";
 
 // Query keys
 const QUERY_KEYS = {
@@ -10,6 +10,7 @@ const QUERY_KEYS = {
   execution: (id: string) => ["execution", id] as const,
   executionSummary: (id: string) => ["execution", id, "summary"] as const,
   executionIssues: (id: string) => ["execution", id, "issues"] as const,
+  executionQualityMetrics: (id: string) => ["execution", id, "quality-metrics"] as const,
 };
 
 // Hooks for executions
@@ -41,6 +42,15 @@ export function useExecutionIssues(id: string) {
     queryKey: QUERY_KEYS.executionIssues(id),
     queryFn: () => apiClient.getIssues(id),
     enabled: !!id,
+  });
+}
+
+export function useExecutionQualityMetrics(id: string) {
+  return useQuery<QualityMetrics>({
+    queryKey: QUERY_KEYS.executionQualityMetrics(id),
+    queryFn: () => apiClient.getExecutionQualityMetrics(id),
+    enabled: !!id,
+    retry: 1, // Only retry once for quality metrics
   });
 }
 

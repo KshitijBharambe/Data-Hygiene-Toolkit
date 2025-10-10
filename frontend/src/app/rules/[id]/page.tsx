@@ -51,7 +51,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/utils/date";
 
 const updateRuleSchema = z.object({
   name: z
@@ -564,13 +564,13 @@ export default function RuleDetailPage({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Created</span>
                   <span className="text-sm">
-                    {format(new Date(rule.created_at), "MMM d, yyyy")}
+                    {formatDate(rule.created_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Updated</span>
                   <span className="text-sm">
-                    {format(new Date(rule.updated_at), "MMM d, yyyy")}
+                    {formatDate(rule.updated_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

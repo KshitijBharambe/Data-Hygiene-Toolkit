@@ -38,7 +38,7 @@ import {
   useDeleteExport,
 } from "@/lib/hooks/useReports";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { formatRelativeTime } from "@/lib/utils/date";
 
 export default function ExportDataPage() {
   const [selectedDataset, setSelectedDataset] = useState<string>("");
@@ -52,7 +52,8 @@ export default function ExportDataPage() {
   const exportDataset = useExportDataset();
   const downloadExport = useDownloadExport();
   const deleteExport = useDeleteExport();
-  const { data: exportHistory, isLoading: isLoadingHistory } = useExportHistory(selectedDataset);
+  const { data: exportHistory, isLoading: isLoadingHistory } =
+    useExportHistory(selectedDataset);
 
   const handleExport = async () => {
     if (!selectedDataset) {
@@ -75,7 +76,12 @@ export default function ExportDataPage() {
       const url = window.URL.createObjectURL(blob.blob);
       const a = document.createElement("a");
       a.href = url;
-      const extension = result.export_format;
+      const extensionMap: Record<string, string> = {
+        excel: "xlsx",
+        csv: "csv",
+        json: "json",
+      };
+      const extension = extensionMap[result.export_format] || result.export_format;
       a.download = `${result.dataset_name}_v${result.version_number}.${extension}`;
       document.body.appendChild(a);
       a.click();
@@ -211,10 +217,14 @@ export default function ExportDataPage() {
             <div className="pt-4">
               <Button
                 onClick={handleExport}
-                disabled={!selectedDataset || exportDataset.isPending || downloadExport.isPending}
+                disabled={
+                  !selectedDataset ||
+                  exportDataset.isPending ||
+                  downloadExport.isPending
+                }
                 className="w-full md:w-auto"
               >
-                {(exportDataset.isPending || downloadExport.isPending) ? (
+                {exportDataset.isPending || downloadExport.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Exporting...
@@ -246,77 +256,89 @@ export default function ExportDataPage() {
                 </div>
               ) : exportHistory?.exports && exportHistory.exports.length > 0 ? (
                 <div className="space-y-4">
-                  {(exportHistory.exports as Record<string, unknown>[]).map((exportItem: Record<string, unknown>) => (
-                    <div
-                      key={exportItem.export_id as string}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText
-                          className={`h-5 w-5 ${
-                            exportItem.file_exists
-                              ? "text-green-500"
-                              : "text-red-500"
-                          }`}
-                        />
-                        <div>
-                          <p className="font-medium">
-                            {exportHistory.dataset_name} v{String(exportItem.dataset_version || '')}
-                          </p>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(exportItem.created_at as string), {
-                                addSuffix: true,
-                              })}
-                            </span>
-                            <span className="uppercase">{String(exportItem.format || '')}</span>
-                            <span>by {String(exportItem.created_by || '')}</span>
+                  {(exportHistory.exports as Record<string, unknown>[]).map(
+                    (exportItem: Record<string, unknown>) => (
+                      <div
+                        key={exportItem.export_id as string}
+                        className="flex items-center justify-between p-4 border rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText
+                            className={`h-5 w-5 ${
+                              exportItem.file_exists
+                                ? "text-green-500"
+                                : "text-red-500"
+                            }`}
+                          />
+                          <div>
+                            <p className="font-medium">
+                              {exportHistory.dataset_name} v
+                              {String(exportItem.dataset_version || "")}
+                            </p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {formatRelativeTime(
+                                  exportItem.created_at as string
+                                )}
+                              </span>
+                              <span className="uppercase">
+                                {String(exportItem.format || "")}
+                              </span>
+                              <span>
+                                by {String(exportItem.created_by || "")}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {exportItem.file_exists as boolean ? (
-                          <>
-                            <Badge variant="outline" className="text-green-600">
-                              <CheckCircle className="mr-1 h-3 w-3" />
-                              Ready
+                        <div className="flex items-center gap-2">
+                          {(exportItem.file_exists as boolean) ? (
+                            <>
+                              <Badge
+                                variant="outline"
+                                className="text-green-600"
+                              >
+                                <CheckCircle className="mr-1 h-3 w-3" />
+                                Ready
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleDownload(
+                                    exportItem.export_id as string,
+                                    `${exportHistory.dataset_name}_v${exportItem.dataset_version}.${exportItem.format}`
+                                  )
+                                }
+                                disabled={downloadExport.isPending}
+                              >
+                                {downloadExport.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Download className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  handleDelete(exportItem.export_id as string)
+                                }
+                                disabled={deleteExport.isPending}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Badge variant="destructive">
+                              <AlertCircle className="mr-1 h-3 w-3" />
+                              File Missing
                             </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleDownload(
-                                  exportItem.export_id as string,
-                                  `${exportHistory.dataset_name}_v${exportItem.dataset_version}.${exportItem.format}`
-                                )
-                              }
-                              disabled={downloadExport.isPending}
-                            >
-                              {downloadExport.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Download className="h-4 w-4" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(exportItem.export_id as string)}
-                              disabled={deleteExport.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </>
-                        ) : (
-                          <Badge variant="destructive">
-                            <AlertCircle className="mr-1 h-3 w-3" />
-                            File Missing
-                          </Badge>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               ) : (
                 <div className="text-center p-8 text-muted-foreground">
@@ -370,7 +392,6 @@ export default function ExportDataPage() {
                 </p>
                 <Badge variant="outline">API Ready</Badge>
               </div>
-
             </div>
           </CardContent>
         </Card>

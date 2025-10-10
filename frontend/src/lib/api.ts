@@ -25,6 +25,7 @@ import {
   ExportCreate,
   Fix,
   FixCreate,
+  QualityMetrics,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
@@ -320,6 +321,13 @@ class ApiClient {
     return response.data;
   }
 
+  async getExecutionQualityMetrics(executionId: string): Promise<QualityMetrics> {
+    const response = await this.client.get<QualityMetrics>(
+      `/executions/${executionId}/quality-metrics`
+    );
+    return response.data;
+  }
+
   // Issue endpoints
   async getIssues(
     executionId?: string,
@@ -460,6 +468,22 @@ class ApiClient {
 
   async getIssuePatterns(): Promise<unknown> {
     const response = await this.client.get("/reports/analytics/issue-patterns");
+    return response.data;
+  }
+
+  async getAllDatasetsQualityScores(): Promise<{
+    datasets: Array<{
+      id: string;
+      name: string;
+      quality_score: number;
+      total_rows: number;
+      total_issues: number;
+      total_fixes: number;
+      status: string;
+    }>;
+    total_datasets: number;
+  }> {
+    const response = await this.client.get("/reports/datasets/quality-scores");
     return response.data;
   }
 

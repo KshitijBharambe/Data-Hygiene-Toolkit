@@ -48,7 +48,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Execution, ExecutionStatus } from "@/types/api";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDate, formatRelativeTime, isValidDate } from "@/lib/utils/date";
 
 const statusColors: Record<ExecutionStatus, string> = {
   queued: "bg-gray-100 text-gray-800",
@@ -318,7 +318,8 @@ export default function ExecutionsPage() {
                 <TableBody>
                   {filteredExecutions.map((execution) => {
                     const duration =
-                      execution.finished_at && execution.started_at
+                      execution.finished_at && execution.started_at &&
+                      isValidDate(execution.finished_at) && isValidDate(execution.started_at)
                         ? Math.round(
                             (new Date(execution.finished_at).getTime() -
                               new Date(execution.started_at).getTime()) /
@@ -363,16 +364,10 @@ export default function ExecutionsPage() {
                         <TableCell>
                           <div className="text-sm">
                             <div>
-                              {format(
-                                new Date(execution.started_at),
-                                "MMM d, yyyy"
-                              )}
+                              {formatDate(execution.started_at)}
                             </div>
                             <div className="text-muted-foreground text-xs">
-                              {formatDistanceToNow(
-                                new Date(execution.started_at),
-                                { addSuffix: true }
-                              )}
+                              {formatRelativeTime(execution.started_at)}
                             </div>
                           </div>
                         </TableCell>

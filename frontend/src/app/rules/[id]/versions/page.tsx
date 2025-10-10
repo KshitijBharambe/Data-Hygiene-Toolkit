@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Criticality, Rule } from '@/types/api'
-import { format } from 'date-fns'
+import { formatDate } from '@/lib/utils/date'
 
 // Extended Rule type with versioning fields
 interface RuleVersion extends Rule {
@@ -52,7 +52,7 @@ function ChangeLogDisplay({ changeLog }: { changeLog: string | null | undefined 
         <div className="flex items-center gap-2 text-muted-foreground">
           <span>Changed by: {log.changed_by_name || 'Unknown'}</span>
           <span>•</span>
-          <span>{format(new Date(log.changed_at), 'MMM d, yyyy HH:mm')}</span>
+          <span>{formatDate(log.changed_at, 'MMM d, yyyy HH:mm')}</span>
         </div>
 
         {log.reason && (
@@ -213,9 +213,9 @@ export default function RuleVersionsPage({
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div>{format(new Date(version.created_at), 'MMM d, yyyy')}</div>
+                        <div>{formatDate(version.created_at, 'MMM d, yyyy')}</div>
                         <div className="text-sm text-muted-foreground">
-                          {format(new Date(version.created_at), 'HH:mm:ss')}
+                          {formatDate(version.created_at, 'HH:mm:ss')}
                         </div>
                       </div>
                     </TableCell>

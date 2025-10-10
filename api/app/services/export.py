@@ -28,7 +28,16 @@ class ExportService:
 
         # Export storage directory
         self.export_storage_path = Path("data/exports")
-        self.export_storage_path.mkdir(parents=True, exist_ok=True)
+        try:
+            self.export_storage_path.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # If permission denied, try to use the path anyway (it might already exist)
+            # This can happen in Docker environments where the directory is created by a different user
+            if not self.export_storage_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Export directory '{self.export_storage_path}' does not exist and cannot be created due to permissions. Please create it manually."
+                )
 
     # === CORE EXPORT FUNCTIONALITY ===
 
@@ -116,26 +125,28 @@ class ExportService:
         include_issues: bool
     ) -> str:
         """Export dataset as CSV file(s)"""
+        print(f"[DEBUG] CSV Export - include_metadata: {include_metadata}, include_issues: {include_issues}")
 
         if not include_metadata and not include_issues:
-            # Simple CSV export
+            # Simple CSV export with explicit UTF-8 encoding
             file_path = self.export_storage_path / f"{base_filename}.csv"
-            df.to_csv(file_path, index=False)
+            df.to_csv(file_path, index=False, encoding='utf-8')
             return str(file_path)
 
         # Create ZIP with multiple files
         zip_path = self.export_storage_path / f"{base_filename}.zip"
 
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
-            # Main data file
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Main data file - use StringIO and encode to bytes
             data_buffer = io.StringIO()
             df.to_csv(data_buffer, index=False)
-            zipf.writestr(f"{base_filename}_data.csv", data_buffer.getvalue())
+            zipf.writestr(f"{base_filename}_data.csv", data_buffer.getvalue().encode('utf-8'))
 
             # Metadata file
             if include_metadata:
                 metadata = self._generate_metadata(dataset_version)
-                zipf.writestr(f"{base_filename}_metadata.json", json.dumps(metadata, indent=2, default=str))
+                metadata_json = json.dumps(metadata, indent=2, default=str)
+                zipf.writestr(f"{base_filename}_metadata.json", metadata_json.encode('utf-8'))
 
             # Issues file
             if include_issues:
@@ -143,9 +154,25 @@ class ExportService:
                 if not issues_df.empty:
                     issues_buffer = io.StringIO()
                     issues_df.to_csv(issues_buffer, index=False)
-                    zipf.writestr(f"{base_filename}_issues.csv", issues_buffer.getvalue())
+                    zipf.writestr(f"{base_filename}_issues.csv", issues_buffer.getvalue().encode('utf-8'))
 
         return str(zip_path)
+
+    def _flatten_dict(self, d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
+        """
+        Flatten a nested dictionary for easier display in tables
+        
+        Example:
+            {'a': 1, 'b': {'c': 2, 'd': 3}} -> {'a': 1, 'b.c': 2, 'b.d': 3}
+        """
+        items = []
+        for k, v in d.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
 
     def _export_excel(
         self,
@@ -156,6 +183,7 @@ class ExportService:
         include_issues: bool
     ) -> str:
         """Export dataset as Excel file with multiple sheets"""
+        print(f"[DEBUG] Excel Export - include_metadata: {include_metadata}, include_issues: {include_issues}")
 
         file_path = self.export_storage_path / f"{base_filename}.xlsx"
 
@@ -165,25 +193,37 @@ class ExportService:
 
             # Metadata sheet
             if include_metadata:
+                print("[DEBUG] Creating Metadata sheet...")
                 metadata = self._generate_metadata(dataset_version)
+                # Flatten nested dictionaries for better readability in Excel
+                flat_metadata = self._flatten_dict(metadata)
                 metadata_df = pd.DataFrame([
-                    {"Property": k, "Value": v} for k, v in metadata.items()
+                    {"Property": k, "Value": v} for k, v in flat_metadata.items()
                 ])
                 metadata_df.to_excel(writer, sheet_name='Metadata', index=False)
+                print(f"[DEBUG] Metadata sheet created with {len(flat_metadata)} rows")
 
             # Issues sheet
             if include_issues:
+                print("[DEBUG] Creating Issues sheet...")
                 issues_df = self._get_issues_dataframe(dataset_version)
                 if not issues_df.empty:
                     issues_df.to_excel(writer, sheet_name='Issues', index=False)
+                    print(f"[DEBUG] Issues sheet created with {len(issues_df)} issues")
+                else:
+                    print("[DEBUG] No issues found, skipping Issues sheet")
 
             # Data quality summary sheet
             if include_metadata:
+                print("[DEBUG] Creating Quality Summary sheet...")
                 quality_summary = self._generate_quality_summary(df)
+                # Flatten nested dictionaries (e.g., column_stats)
+                flat_quality = self._flatten_dict(quality_summary)
                 quality_df = pd.DataFrame([
-                    {"Metric": k, "Value": v} for k, v in quality_summary.items()
+                    {"Metric": k, "Value": v} for k, v in flat_quality.items()
                 ])
                 quality_df.to_excel(writer, sheet_name='Quality Summary', index=False)
+                print(f"[DEBUG] Quality Summary sheet created with {len(flat_quality)} metrics")
 
         return str(file_path)
 
@@ -239,17 +279,21 @@ class ExportService:
             .all()
         )
 
+        # Helper function to strip timezone from datetime objects
+        def strip_tz(dt):
+            return dt.replace(tzinfo=None) if dt and hasattr(dt, 'replace') else dt
+
         return {
             "dataset_id": dataset.id,
             "dataset_name": dataset.name,
             "source_type": dataset.source_type.value,
             "original_filename": dataset.original_filename,
             "uploaded_by": dataset.uploaded_by,
-            "uploaded_at": dataset.uploaded_at,
+            "uploaded_at": strip_tz(dataset.uploaded_at),
             "current_status": dataset.status.value,
             "version_info": {
                 "version_number": dataset_version.version_no,
-                "created_at": dataset_version.created_at,
+                "created_at": strip_tz(dataset_version.created_at),
                 "row_count": dataset_version.rows,
                 "column_count": dataset_version.columns,
                 "notes": dataset_version.change_note,
@@ -258,10 +302,10 @@ class ExportService:
             "processing_history": {
                 "total_executions": len(executions),
                 "total_issues_found": sum(len(e.issues) for e in executions),
-                "last_execution": executions[-1].started_at if executions else None
+                "last_execution": strip_tz(executions[-1].started_at) if executions else None
             },
             "export_info": {
-                "exported_at": datetime.now(timezone.utc),
+                "exported_at": strip_tz(datetime.now(timezone.utc)),
                 "export_version": "1.0"
             }
         }
@@ -322,6 +366,10 @@ class ExportService:
             # Get fixes for this issue
             fixes = self.db.query(Fix).filter(Fix.issue_id == issue.id).all()
 
+            # Remove timezone info from datetimes for Excel compatibility
+            created_at = issue.created_at.replace(tzinfo=None) if issue.created_at else None
+            latest_fix_at = fixes[-1].fixed_at.replace(tzinfo=None) if fixes and fixes[-1].fixed_at else None
+
             issues_data.append({
                 "issue_id": issue.id,
                 "execution_id": issue.execution_id,
@@ -332,11 +380,11 @@ class ExportService:
                 "suggested_value": issue.suggested_value,
                 "severity": issue.severity.value if issue.severity else None,
                 "message": issue.message,
-                "created_at": issue.created_at,
+                "created_at": created_at,
                 "is_fixed": len(fixes) > 0,
                 "fix_count": len(fixes),
                 "latest_fix": fixes[-1].new_value if fixes else None,
-                "latest_fix_at": fixes[-1].fixed_at if fixes else None
+                "latest_fix_at": latest_fix_at
             })
 
         return pd.DataFrame(issues_data)
@@ -571,7 +619,7 @@ class ExportService:
         uniqueness = (1 - df.duplicated().sum() / len(df)) * 100 if len(df) > 0 else 100
         overall_quality = (completeness + uniqueness) / 2
 
-        # Remove timezone info for Excel compatibility
+        # Strip timezone info for Excel compatibility
         last_updated = version.created_at.replace(tzinfo=None) if version.created_at else None
         report_generated = datetime.now(timezone.utc).replace(tzinfo=None)
 

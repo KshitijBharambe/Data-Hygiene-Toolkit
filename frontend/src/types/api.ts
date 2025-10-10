@@ -331,3 +331,17 @@ export interface DashboardOverview {
     };
   };
 }
+
+// Quality Metrics types
+export type QualityMetricsStatus = "ok" | "not_available";
+
+export interface QualityMetrics {
+  execution_id: string;
+  dataset_version_id: string;
+  dqi: number;
+  clean_rows_pct: number;
+  hybrid: number;
+  status: QualityMetricsStatus;
+  message: string | null;
+  computed_at: string;
+}

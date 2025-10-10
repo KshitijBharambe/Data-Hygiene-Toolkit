@@ -344,3 +344,16 @@ class AppliedFixResponse(BaseModel):
     severity: str
     fixed_by: Optional[str]
     applied_at: Optional[str]
+
+# Data Quality Metrics schemas
+
+class QualityMetricsResponse(BaseModel):
+    execution_id: str
+    dataset_version_id: str
+    dqi: float
+    clean_rows_pct: float
+    hybrid: float
+    status: str  # "ok" or "not_available"
+    message: Optional[str] = None
+    computed_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
