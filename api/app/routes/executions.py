@@ -15,6 +15,7 @@ from app.schemas import (
     ExecutionResponse, ExecutionCreate, IssueResponse, QualityMetricsResponse
 )
 from app.services.rule_engine import RuleEngineService
+from app.services.enhanced_rule_engine import EnhancedRuleEngineService
 from app.services.data_quality import DataQualityService
 
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
@@ -154,7 +155,12 @@ async def create_execution(
     # Check if dataset is accessible by user (you might want to add access control)
 
     try:
-        rule_service = RuleEngineService(db)
+        # Use enhanced rule engine with parallel execution and comprehensive logging
+        rule_service = EnhancedRuleEngineService(
+            db,
+            enable_parallel=True,
+            max_workers=4  # Configurable based on system resources
+        )
         execution = rule_service.execute_rules_on_dataset(
             dataset_version=dataset_version,
             rule_ids=execution_data.rule_ids,

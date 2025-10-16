@@ -35,9 +35,11 @@ class RuleValidator(ABC):
         # Merge target_columns into params if not already present
         # This ensures validators can access columns from either location
         target_columns_str = getattr(rule, 'target_columns', None)
-        print(f"[DEBUG] Rule: {rule.name}, target_columns_str: {target_columns_str}, params before: {self.params}")
+        print(
+            f"[DEBUG] Rule: {rule.name}, target_columns_str: {target_columns_str}, params before: {self.params}")
         if target_columns_str:
-            target_columns = json.loads(target_columns_str) if isinstance(target_columns_str, str) else target_columns_str
+            target_columns = json.loads(target_columns_str) if isinstance(
+                target_columns_str, str) else target_columns_str
             if target_columns and 'columns' not in self.params:
                 self.params['columns'] = target_columns
         print(f"[DEBUG] Rule: {rule.name}, params after: {self.params}")
@@ -93,7 +95,8 @@ class MissingDataValidator(RuleValidator):
         """Main validation entry point"""
         # Use chunking for large DataFrames
         if len(self.df) > 10000:
-            logger.info(f"Using chunked validation for large dataset ({len(self.df)} rows)")
+            logger.info(
+                f"Using chunked validation for large dataset ({len(self.df)} rows)")
             return self.validate_chunked()
         else:
             return self._validate_full()
@@ -104,13 +107,16 @@ class MissingDataValidator(RuleValidator):
         target_columns = self.params.get('columns', [])
 
         if not target_columns:
-            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            print(
+                f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
 
         # Validate columns exist in dataset
-        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        missing_columns = [
+            col for col in target_columns if col not in self.df.columns]
         if missing_columns:
-            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+            print(
+                f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
 
         for column in target_columns:
             if column not in self.df.columns:
@@ -137,41 +143,64 @@ class StandardizationValidator(RuleValidator):
     """Validator for data standardization (dates, phones, emails, etc.)"""
 
     def validate(self) -> List[Dict[str, Any]]:
+        """Main validation entry point"""
+        # Use chunking for large DataFrames
+        if len(self.df) > 10000:
+            logger.info(
+                f"Using chunked validation for large dataset ({len(self.df)} rows)")
+            return self.validate_chunked()
+        else:
+            return self._validate_full()
+
+    def _validate_full(self) -> List[Dict[str, Any]]:
+        """Original validation logic for small DataFrames"""
         issues = []
         target_columns = self.params.get('columns', [])
         standardization_type = self.params.get('type', 'date')
 
         if not target_columns:
-            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            print(
+                f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
 
         # Validate columns exist in dataset
-        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        missing_columns = [
+            col for col in target_columns if col not in self.df.columns]
         if missing_columns:
-            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+            print(
+                f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
 
         for column in target_columns:
             if column not in self.df.columns:
                 print(f"Skipping column '{column}' - not found in dataset")
                 continue
-                
+
             if standardization_type == 'date':
                 issues.extend(self._validate_dates(column))
             elif standardization_type == 'phone':
                 issues.extend(self._validate_phones(column))
             elif standardization_type == 'email':
                 issues.extend(self._validate_emails(column))
-                
+
         return issues
-    
+
+    def _validate_chunk(self, chunk: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Validate a single chunk"""
+        # Temporarily replace self.df with chunk
+        original_df = self.df
+        self.df = chunk
+        issues = self._validate_full()
+        self.df = original_df
+        return issues
+
     def _validate_dates(self, column: str) -> List[Dict[str, Any]]:
         issues = []
         date_format = self.params.get('format', '%Y-%m-%d')
-        
+
         for idx, value in self.df[column].items():
             if pd.isnull(value):
                 continue
-                
+
             try:
                 # Try to parse the date
                 parsed_date = pd.to_datetime(value, format=date_format)
@@ -194,17 +223,17 @@ class StandardizationValidator(RuleValidator):
                     'message': f'Invalid date format, expected {date_format}',
                     'category': 'date_standardization'
                 })
-        
+
         return issues
-    
+
     def _validate_phones(self, column: str) -> List[Dict[str, Any]]:
         issues = []
         expected_format = self.params.get('format', '+1-XXX-XXX-XXXX')
-        
+
         for idx, value in self.df[column].items():
             if pd.isnull(value):
                 continue
-                
+
             # Basic phone validation - customize based on requirements
             phone_str = str(value).strip()
             if not phone_str.startswith('+') or len(phone_str) < 10:
@@ -216,16 +245,16 @@ class StandardizationValidator(RuleValidator):
                     'message': f'Phone format should be {expected_format}',
                     'category': 'phone_standardization'
                 })
-        
+
         return issues
-    
+
     def _validate_emails(self, column: str) -> List[Dict[str, Any]]:
         issues = []
-        
+
         for idx, value in self.df[column].items():
             if pd.isnull(value):
                 continue
-                
+
             email_str = str(value).strip().lower()
             if '@' not in email_str or '.' not in email_str.split('@')[-1]:
                 issues.append({
@@ -236,7 +265,7 @@ class StandardizationValidator(RuleValidator):
                     'message': 'Invalid email format',
                     'category': 'email_standardization'
                 })
-        
+
         return issues
 
 
@@ -244,36 +273,53 @@ class ValueListValidator(RuleValidator):
     """Validator for allowed values list"""
 
     def validate(self) -> List[Dict[str, Any]]:
+        """Main validation entry point"""
+        # Use chunking for large DataFrames
+        if len(self.df) > 10000:
+            logger.info(
+                f"Using chunked validation for large dataset ({len(self.df)} rows)")
+            return self.validate_chunked()
+        else:
+            return self._validate_full()
+
+    def _validate_full(self) -> List[Dict[str, Any]]:
+        """Original validation logic for small DataFrames"""
         issues = []
         target_columns = self.params.get('columns', [])
         allowed_values = self.params.get('allowed_values', [])
         case_sensitive = self.params.get('case_sensitive', True)
 
         if not target_columns:
-            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            print(
+                f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
 
         if not allowed_values:
-            print(f"Warning: Rule {self.rule.name} has no allowed values configured")
+            print(
+                f"Warning: Rule {self.rule.name} has no allowed values configured")
             return issues
 
         # Validate columns exist in dataset
-        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        missing_columns = [
+            col for col in target_columns if col not in self.df.columns]
         if missing_columns:
-            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+            print(
+                f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
 
         for column in target_columns:
             if column not in self.df.columns:
                 print(f"Skipping column '{column}' - not found in dataset")
                 continue
-                
+
             for idx, value in self.df[column].items():
                 if pd.isnull(value):
                     continue
-                    
-                check_value = str(value) if case_sensitive else str(value).lower()
-                check_allowed = allowed_values if case_sensitive else [v.lower() for v in allowed_values]
-                
+
+                check_value = str(
+                    value) if case_sensitive else str(value).lower()
+                check_allowed = allowed_values if case_sensitive else [
+                    v.lower() for v in allowed_values]
+
                 if check_value not in check_allowed:
                     issues.append({
                         'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
@@ -283,7 +329,16 @@ class ValueListValidator(RuleValidator):
                         'message': f'Value must be one of: {", ".join(allowed_values)}',
                         'category': 'value_list'
                     })
-        
+
+        return issues
+
+    def _validate_chunk(self, chunk: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Validate a single chunk"""
+        # Temporarily replace self.df with chunk
+        original_df = self.df
+        self.df = chunk
+        issues = self._validate_full()
+        self.df = original_df
         return issues
 
 
@@ -297,25 +352,28 @@ class LengthRangeValidator(RuleValidator):
         max_length = self.params.get('max_length', float('inf'))
 
         if not target_columns:
-            print(f"Warning: Rule {self.rule.name} has no target columns configured")
+            print(
+                f"Warning: Rule {self.rule.name} has no target columns configured")
             return issues
 
         # Validate columns exist in dataset
-        missing_columns = [col for col in target_columns if col not in self.df.columns]
+        missing_columns = [
+            col for col in target_columns if col not in self.df.columns]
         if missing_columns:
-            print(f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
+            print(
+                f"Warning: Rule {self.rule.name} references non-existent columns: {missing_columns}")
 
         for column in target_columns:
             if column not in self.df.columns:
                 print(f"Skipping column '{column}' - not found in dataset")
                 continue
-                
+
             for idx, value in self.df[column].items():
                 if pd.isnull(value):
                     continue
-                    
+
                 value_length = len(str(value))
-                
+
                 if value_length < min_length:
                     issues.append({
                         'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
@@ -334,40 +392,41 @@ class LengthRangeValidator(RuleValidator):
                         'message': f'Value too long. Maximum length: {max_length}',
                         'category': 'length_range'
                     })
-        
+
         return issues
 
 
 class CharRestrictionValidator(RuleValidator):
     """Validator for character restrictions (alphabetic only, etc.)"""
-    
+
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
         target_columns = self.params.get('columns', [])
         restriction_type = self.params.get('type', 'alphabetic')
-        
+
         for column in target_columns:
             if column not in self.df.columns:
                 continue
-                
+
             for idx, value in self.df[column].items():
                 if pd.isnull(value):
                     continue
-                    
+
                 value_str = str(value)
                 valid = True
                 message = ''
-                
+
                 if restriction_type == 'alphabetic':
                     valid = value_str.replace(' ', '').isalpha()
                     message = 'Value must contain only alphabetic characters'
                 elif restriction_type == 'numeric':
-                    valid = value_str.replace('.', '').replace('-', '').isdigit()
+                    valid = value_str.replace(
+                        '.', '').replace('-', '').isdigit()
                     message = 'Value must contain only numeric characters'
                 elif restriction_type == 'alphanumeric':
                     valid = value_str.replace(' ', '').isalnum()
                     message = 'Value must contain only alphanumeric characters'
-                
+
                 if not valid:
                     issues.append({
                         'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
@@ -377,7 +436,7 @@ class CharRestrictionValidator(RuleValidator):
                         'message': message,
                         'category': 'char_restriction'
                     })
-        
+
         return issues
 
 
@@ -537,7 +596,8 @@ class CrossFieldValidator(RuleValidator):
             if total_field and total_field in self.df.columns:
                 try:
                     expected = pd.to_numeric(row[total_field], errors='coerce')
-                    if pd.notna(expected) and abs(field_sum - expected) > 0.01:  # Allow small floating point differences
+                    # Allow small floating point differences
+                    if pd.notna(expected) and abs(field_sum - expected) > 0.01:
                         issues.append({
                             'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
                             'column_name': total_field,
@@ -661,7 +721,8 @@ class CustomValidator(RuleValidator):
         issues = []
         expression = self.params.get('expression', '')
         target_columns = self.params.get('columns', [])
-        error_message = self.params.get('error_message', 'Custom validation failed')
+        error_message = self.params.get(
+            'error_message', 'Custom validation failed')
 
         if not expression or not target_columns:
             return issues
@@ -716,8 +777,10 @@ class CustomValidator(RuleValidator):
             return issues
 
         for idx, row in self.df.iterrows():
-            lookup_value = str(row[lookup_column]) if pd.notna(row[lookup_column]) else ''
-            target_value = str(row[target_column]) if pd.notna(row[target_column]) else ''
+            lookup_value = str(row[lookup_column]) if pd.notna(
+                row[lookup_column]) else ''
+            target_value = str(row[target_column]) if pd.notna(
+                row[target_column]) else ''
             expected_value = lookup_table.get(lookup_value, '')
 
             if expected_value and target_value != expected_value:
@@ -749,7 +812,7 @@ class CustomValidator(RuleValidator):
 
 class RuleEngineService:
     """Main service for rule engine operations"""
-    
+
     def __init__(self, db: Session):
         self.db = db
         self.validators = {
@@ -762,15 +825,15 @@ class RuleEngineService:
             RuleKind.regex: RegexValidator,
             RuleKind.custom: CustomValidator,
         }
-    
+
     def get_active_rules(self) -> List[Rule]:
         """Get all active rules"""
         return self.db.query(Rule).filter(Rule.is_active == True).all()
-    
+
     def get_rule_by_id(self, rule_id: str) -> Optional[Rule]:
         """Get rule by ID"""
         return self.db.query(Rule).filter(Rule.id == rule_id).first()
-    
+
     def create_rule(
         self,
         name: str,
@@ -819,15 +882,15 @@ class RuleEngineService:
         self.db.refresh(rule)
 
         return rule
-    
+
     def execute_rules_on_dataset(
-        self, 
-        dataset_version: DatasetVersion, 
-        rule_ids: Optional[List[str]], 
+        self,
+        dataset_version: DatasetVersion,
+        rule_ids: Optional[List[str]],
         current_user: User
     ) -> Execution:
         """Execute rules on a dataset version"""
-        
+
         # Get rules to execute
         if rule_ids:
             rules = self.db.query(Rule).filter(
@@ -836,13 +899,13 @@ class RuleEngineService:
             ).all()
         else:
             rules = self.get_active_rules()
-        
+
         if not rules:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No active rules found to execute"
             )
-        
+
         # Create execution record
         execution = Execution(
             dataset_version_id=dataset_version.id,
@@ -850,11 +913,11 @@ class RuleEngineService:
             status=ExecutionStatus.running,
             total_rules=len(rules)
         )
-        
+
         self.db.add(execution)
         self.db.commit()
         self.db.refresh(execution)
-        
+
         try:
             # Load dataset data (this would need to be implemented based on how data is stored)
             # For now, assuming we have a method to load the dataset as DataFrame
@@ -867,7 +930,8 @@ class RuleEngineService:
             successful_rules = 0
             failed_rules = 0
 
-            logger.info(f"Executing {len(rules)} rules on dataset with {len(df)} rows, {len(df.columns)} columns")
+            logger.info(
+                f"Executing {len(rules)} rules on dataset with {len(df)} rows, {len(df.columns)} columns")
 
             # Execute each rule
             for rule in rules:
@@ -906,9 +970,11 @@ class RuleEngineService:
                         target_columns = params.get('columns', [])
                         if not target_columns:
                             # Try getting from target_columns field
-                            target_columns_str = getattr(rule, 'target_columns', None)
+                            target_columns_str = getattr(
+                                rule, 'target_columns', None)
                             if target_columns_str:
-                                target_columns = json.loads(target_columns_str) if isinstance(target_columns_str, str) else target_columns_str
+                                target_columns = json.loads(target_columns_str) if isinstance(
+                                    target_columns_str, str) else target_columns_str
 
                         if not target_columns and rule_kind not in [RuleKind.custom]:
                             execution_rule.note = "Rule has no target columns configured"
@@ -916,7 +982,8 @@ class RuleEngineService:
                             continue
 
                         # Check if columns exist in dataset
-                        missing_columns = [col for col in target_columns if col not in df.columns]
+                        missing_columns = [
+                            col for col in target_columns if col not in df.columns]
                         if missing_columns:
                             execution_rule.note = f"Warning: Columns not found in dataset: {', '.join(missing_columns)}"
                             # Don't fail completely, just note it and continue
@@ -939,7 +1006,8 @@ class RuleEngineService:
                     # Create issue records with validation
                     rule_issues = []
                     # Create lightweight snapshot for issues (we already have it in ExecutionRule)
-                    lightweight_snapshot = create_lightweight_rule_snapshot(rule)
+                    lightweight_snapshot = create_lightweight_rule_snapshot(
+                        rule)
 
                     for issue_data in issues:
                         try:
@@ -954,8 +1022,10 @@ class RuleEngineService:
                                 row_index=issue_data['row_index'],
                                 column_name=issue_data['column_name'],
                                 current_value=issue_data.get('current_value'),
-                                suggested_value=issue_data.get('suggested_value'),
-                                message=issue_data.get('message', 'Data quality issue found'),
+                                suggested_value=issue_data.get(
+                                    'suggested_value'),
+                                message=issue_data.get(
+                                    'message', 'Data quality issue found'),
                                 category=issue_data.get('category', 'unknown'),
                                 severity=rule.criticality
                             )
@@ -963,19 +1033,23 @@ class RuleEngineService:
                             rule_issues.append(issue)
                             all_issues.append(issue)
                         except Exception as issue_error:
-                            print(f"Error creating issue record: {str(issue_error)}")
+                            print(
+                                f"Error creating issue record: {str(issue_error)}")
                             continue
 
                     # Update execution rule stats
                     execution_rule.error_count = len(rule_issues)
-                    execution_rule.rows_flagged = len(set(i.row_index for i in rule_issues)) if rule_issues else 0
-                    execution_rule.cols_flagged = len(set(i.column_name for i in rule_issues)) if rule_issues else 0
+                    execution_rule.rows_flagged = len(
+                        set(i.row_index for i in rule_issues)) if rule_issues else 0
+                    execution_rule.cols_flagged = len(
+                        set(i.column_name for i in rule_issues)) if rule_issues else 0
                     successful_rules += 1
 
                 except Exception as rule_error:
                     execution_rule.note = f"Error executing rule: {str(rule_error)}"
                     failed_rules += 1
-                    print(f"Rule execution error for rule {rule.id}: {str(rule_error)}")
+                    print(
+                        f"Rule execution error for rule {rule.id}: {str(rule_error)}")
 
             # Determine final execution status
             if failed_rules == 0:
@@ -989,8 +1063,10 @@ class RuleEngineService:
 
             # Calculate summary statistics safely
             if all_issues:
-                execution.rows_affected = len(set(issue.row_index for issue in all_issues))
-                execution.columns_affected = len(set(issue.column_name for issue in all_issues))
+                execution.rows_affected = len(
+                    set(issue.row_index for issue in all_issues))
+                execution.columns_affected = len(
+                    set(issue.column_name for issue in all_issues))
             else:
                 execution.rows_affected = 0
                 execution.columns_affected = 0
@@ -1027,7 +1103,7 @@ class RuleEngineService:
             )
 
         return execution
-    
+
     def _load_dataset_as_dataframe(self, dataset_version) -> pd.DataFrame:
         """Load dataset version as pandas DataFrame"""
         try:
@@ -1042,7 +1118,8 @@ class RuleEngineService:
 
             # Validate that we got a valid DataFrame
             if df is None or df.empty:
-                raise ValueError(f"Dataset version {dataset_version.id} contains no data")
+                raise ValueError(
+                    f"Dataset version {dataset_version.id} contains no data")
 
             return df
         except ImportError as e:
@@ -1063,15 +1140,16 @@ class RuleEngineService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to load dataset: {str(e)}"
             )
-    
+
     def _count_issues_by_severity(self, issues: List[Issue]) -> Dict[str, int]:
         """Count issues by severity level"""
         counts = {}
         for issue in issues:
-            severity = issue.severity.value if hasattr(issue.severity, 'value') else str(issue.severity)
+            severity = issue.severity.value if hasattr(
+                issue.severity, 'value') else str(issue.severity)
             counts[severity] = counts.get(severity, 0) + 1
         return counts
-    
+
     def _count_issues_by_category(self, issues: List[Issue]) -> Dict[str, int]:
         """Count issues by category"""
         counts = {}
