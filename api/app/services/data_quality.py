@@ -559,12 +559,13 @@ class DataQualityService:
         """
         Generate data quality summary using only database records (no file loading).
         This is optimized for bulk operations like getting all dataset quality scores.
-        
+        Uses the new DQI/CleanRowsPct/Hybrid metrics from the latest execution.
+
         Args:
             dataset_id: Dataset ID to summarize
-            
+
         Returns:
-            Quality summary dictionary with metrics from database
+            Quality summary dictionary with new metrics from database
         """
         # Get dataset and latest version
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -591,6 +592,7 @@ class DataQualityService:
         executions = (
             self.db.query(Execution)
             .filter(Execution.dataset_version_id == latest_version.id)
+            .order_by(Execution.started_at.desc())
             .all()
         )
 
@@ -604,17 +606,32 @@ class DataQualityService:
             .count()
         ) if execution_ids else 0
 
-        # Calculate quality score based on issue/fix ratio (without loading file)
-        # Higher score = fewer issues relative to data size, more fixes applied
-        if len(executions) == 0:
-            quality_score = 0.0  # No executions = can't determine quality
-        elif total_issues == 0:
-            quality_score = 100.0  # No issues found = perfect quality
-        else:
-            fix_rate = (total_fixes / total_issues) * 100 if total_issues > 0 else 0
-            # Score: base score minus issues per 100 rows, plus fix rate bonus
-            issues_per_100_rows = (total_issues / latest_version.rows * 100) if latest_version.rows > 0 else total_issues
-            quality_score = max(0, min(100, 100 - issues_per_100_rows + (fix_rate * 0.2)))
+        # Get quality metrics from the latest execution (new system)
+        dqi = 0.0
+        clean_rows_pct = 0.0
+        hybrid = 0.0
+
+        if executions:
+            latest_execution = executions[0]
+            # Try to get computed metrics from DataQualityMetrics table
+            quality_metrics = self.db.query(DataQualityMetrics).filter(
+                DataQualityMetrics.execution_id == latest_execution.id
+            ).first()
+
+            if quality_metrics:
+                dqi = float(quality_metrics.dqi)
+                clean_rows_pct = float(quality_metrics.clean_rows_pct)
+                hybrid = float(quality_metrics.hybrid)
+            else:
+                # Compute on-demand if not cached
+                try:
+                    metrics_response = self.compute_quality_metrics(latest_execution.id)
+                    dqi = metrics_response.dqi
+                    clean_rows_pct = metrics_response.clean_rows_pct
+                    hybrid = metrics_response.hybrid
+                except:
+                    # If computation fails, default to 0
+                    pass
 
         return {
             "dataset_id": dataset_id,
@@ -624,17 +641,22 @@ class DataQualityService:
             "total_columns": latest_version.columns,
             "total_issues_found": total_issues,
             "total_fixes_applied": total_fixes,
-            "data_quality_score": round(quality_score, 1),
+            "dqi": round(dqi, 2),
+            "clean_rows_pct": round(clean_rows_pct, 2),
+            "hybrid": round(hybrid, 2),
             "execution_summary": {
                 "total_executions": len(executions),
                 "last_execution": executions[-1].started_at if executions else None,
                 "success_rate": len([e for e in executions if e.status.value == "succeeded"]) / len(executions) * 100 if executions else 0
             },
-            "note": "Summary calculated from database records. Use detailed endpoint for full file analysis."
+            "note": "Summary calculated from database records using DQI/CleanRowsPct/Hybrid metrics. Use detailed endpoint for full file analysis."
         }
 
     def create_data_quality_summary(self, dataset_id: str) -> Dict[str, Any]:
-        """Generate comprehensive data quality summary for a dataset"""
+        """
+        Generate comprehensive data quality summary for a dataset.
+        Uses the new DQI/CleanRowsPct/Hybrid metrics from the latest execution.
+        """
 
         # Get dataset and latest version
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -670,6 +692,7 @@ class DataQualityService:
         executions = (
             self.db.query(Execution)
             .filter(Execution.dataset_version_id == latest_version.id)
+            .order_by(Execution.started_at.desc())
             .all()
         )
 
@@ -682,8 +705,32 @@ class DataQualityService:
             .count()
         )
 
-        # Basic data quality metrics
-        quality_score = self._calculate_quality_score(df)
+        # Get quality metrics from the latest execution (new system)
+        dqi = 0.0
+        clean_rows_pct = 0.0
+        hybrid = 0.0
+
+        if executions:
+            latest_execution = executions[0]
+            # Try to get computed metrics from DataQualityMetrics table
+            quality_metrics = self.db.query(DataQualityMetrics).filter(
+                DataQualityMetrics.execution_id == latest_execution.id
+            ).first()
+
+            if quality_metrics:
+                dqi = float(quality_metrics.dqi)
+                clean_rows_pct = float(quality_metrics.clean_rows_pct)
+                hybrid = float(quality_metrics.hybrid)
+            else:
+                # Compute on-demand if not cached
+                try:
+                    metrics_response = self.compute_quality_metrics(latest_execution.id)
+                    dqi = metrics_response.dqi
+                    clean_rows_pct = metrics_response.clean_rows_pct
+                    hybrid = metrics_response.hybrid
+                except:
+                    # If computation fails, default to 0
+                    pass
 
         return {
             "dataset_id": dataset_id,
@@ -695,7 +742,9 @@ class DataQualityService:
             "duplicate_rows": int(df.duplicated().sum()),
             "total_issues_found": total_issues,
             "total_fixes_applied": total_fixes,
-            "data_quality_score": quality_score,
+            "dqi": round(dqi, 2),
+            "clean_rows_pct": round(clean_rows_pct, 2),
+            "hybrid": round(hybrid, 2),
             "column_quality": self._analyze_column_quality(df),
             "execution_summary": {
                 "total_executions": len(executions),

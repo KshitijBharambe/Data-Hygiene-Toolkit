@@ -308,20 +308,26 @@ async def get_dashboard_overview(
         )
 
         # Quality statistics (optimized - from database only)
+        # Using new DQI/CleanRowsPct/Hybrid metrics system
         datasets = db.query(Dataset).all()
-        quality_scores = []
+        dqi_scores = []
+        clean_rows_pct_scores = []
+        hybrid_scores = []
 
         for dataset in datasets:
             try:
                 data_quality_service = DataQualityService(db)
                 summary = data_quality_service.create_data_quality_summary_from_db(
                     dataset.id)
-                quality_scores.append(summary.get("data_quality_score", 0))
+                dqi_scores.append(summary.get("dqi", 0))
+                clean_rows_pct_scores.append(summary.get("clean_rows_pct", 0))
+                hybrid_scores.append(summary.get("hybrid", 0))
             except:
                 continue
 
-        avg_quality_score = sum(quality_scores) / \
-            len(quality_scores) if quality_scores else 0
+        avg_dqi = sum(dqi_scores) / len(dqi_scores) if dqi_scores else 0
+        avg_clean_rows_pct = sum(clean_rows_pct_scores) / len(clean_rows_pct_scores) if clean_rows_pct_scores else 0
+        avg_hybrid = sum(hybrid_scores) / len(hybrid_scores) if hybrid_scores else 0
 
         # Dataset status distribution
         status_distribution = {}
@@ -336,7 +342,9 @@ async def get_dashboard_overview(
                 "total_executions": total_executions,
                 "total_issues": total_issues,
                 "total_fixes": total_fixes,
-                "avg_quality_score": round(avg_quality_score, 2),
+                "avg_dqi": round(avg_dqi, 2),
+                "avg_clean_rows_pct": round(avg_clean_rows_pct, 2),
+                "avg_hybrid": round(avg_hybrid, 2),
                 "issues_fixed_rate": round((total_fixes / total_issues * 100) if total_issues > 0 else 0, 2)
             },
             "recent_activity": {
@@ -363,10 +371,10 @@ async def get_dashboard_overview(
             "statistics": {
                 "dataset_status_distribution": status_distribution,
                 "quality_score_distribution": {
-                    "excellent": len([s for s in quality_scores if s >= 90]),
-                    "good": len([s for s in quality_scores if 70 <= s < 90]),
-                    "fair": len([s for s in quality_scores if 50 <= s < 70]),
-                    "poor": len([s for s in quality_scores if s < 50])
+                    "excellent": len([s for s in hybrid_scores if s >= 90]),
+                    "good": len([s for s in hybrid_scores if 70 <= s < 90]),
+                    "fair": len([s for s in hybrid_scores if 50 <= s < 70]),
+                    "poor": len([s for s in hybrid_scores if s < 50])
                 }
             }
         }
@@ -497,7 +505,7 @@ async def get_all_datasets_quality_scores(
 
                 # Calculate metrics from database
                 total_issues = sum(len(exec.issues) for exec in executions if exec.issues)
-                
+
                 # Get total fixes for this dataset's issues
                 execution_ids = [e.id for e in executions]
                 total_fixes = (
@@ -507,22 +515,43 @@ async def get_all_datasets_quality_scores(
                     .count()
                 ) if execution_ids else 0
 
-                # Calculate quality score based on issue/fix ratio
-                # If no executions have been run, we can't determine quality
-                if len(executions) == 0:
-                    quality_score = 0.0  # No data to calculate quality
-                elif total_issues == 0:
-                    quality_score = 100.0  # No issues found = perfect quality
-                else:
-                    fix_rate = (total_fixes / total_issues) * 100 if total_issues > 0 else 0
-                    # Score: 100 - (issues per 100 rows) + (fix rate bonus)
-                    issues_per_100_rows = (total_issues / latest_version.rows * 100) if latest_version.rows > 0 else total_issues
-                    quality_score = max(0, min(100, 100 - issues_per_100_rows + (fix_rate * 0.2)))
+                # Get quality metrics from the latest execution (new system)
+                dqi = 0.0
+                clean_rows_pct = 0.0
+                hybrid = 0.0
+
+                if executions:
+                    from app.services.data_quality import DataQualityService
+                    from app.models import DataQualityMetrics
+
+                    latest_execution = executions[0]
+                    # Try to get computed metrics from DataQualityMetrics table
+                    quality_metrics = db.query(DataQualityMetrics).filter(
+                        DataQualityMetrics.execution_id == latest_execution.id
+                    ).first()
+
+                    if quality_metrics:
+                        dqi = float(quality_metrics.dqi)
+                        clean_rows_pct = float(quality_metrics.clean_rows_pct)
+                        hybrid = float(quality_metrics.hybrid)
+                    else:
+                        # Compute on-demand if not cached
+                        try:
+                            data_quality_service = DataQualityService(db)
+                            metrics_response = data_quality_service.compute_quality_metrics(latest_execution.id)
+                            dqi = metrics_response.dqi
+                            clean_rows_pct = metrics_response.clean_rows_pct
+                            hybrid = metrics_response.hybrid
+                        except:
+                            # If computation fails, default to 0
+                            pass
 
                 quality_scores.append({
                     "id": dataset.id,
                     "name": dataset.name,
-                    "quality_score": round(quality_score, 1),
+                    "dqi": round(dqi, 2),
+                    "clean_rows_pct": round(clean_rows_pct, 2),
+                    "hybrid": round(hybrid, 2),
                     "total_rows": latest_version.rows,
                     "total_issues": total_issues,
                     "total_fixes": total_fixes,

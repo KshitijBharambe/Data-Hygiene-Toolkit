@@ -303,7 +303,9 @@ export interface DashboardOverview {
     total_executions: number;
     total_issues: number;
     total_fixes: number;
-    avg_quality_score: number;
+    avg_dqi: number;
+    avg_clean_rows_pct: number;
+    avg_hybrid: number;
     issues_fixed_rate: number;
   };
   recent_activity: {
