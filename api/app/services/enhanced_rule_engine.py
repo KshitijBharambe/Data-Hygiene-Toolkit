@@ -14,7 +14,8 @@ from app.models import (
     Rule, RuleKind, Execution, ExecutionRule, Issue,
     DatasetVersion, User, Criticality, ExecutionStatus
 )
-from app.services.rule_engine import RuleEngineService, RuleValidator
+from app.services.rule_engine import RuleEngineService
+from app.services.dependency_manager import DependencyManager
 from app.utils.parallel_executor import ParallelRuleExecutor, ExecutionMode
 from app.utils.logging_service import get_logger, ExecutionPhase
 from app.utils.memory_optimization import MemoryMonitor, OptimizedDataFrameOperations
@@ -50,10 +51,14 @@ class EnhancedRuleEngineService(RuleEngineService):
         else:
             self.parallel_executor = None
 
+        # Setup dependency manager
+        self.dependency_manager = DependencyManager(db)
+
         self.logger.log_info(
             f"Enhanced rule engine initialized",
             parallel_enabled=enable_parallel,
-            max_workers=max_workers
+            max_workers=max_workers,
+            dependency_management_enabled=True
         )
 
     def execute_rules_on_dataset(
@@ -86,6 +91,43 @@ class EnhancedRuleEngineService(RuleEngineService):
 
         if not rules:
             raise Exception("No active rules found to execute")
+
+        # Apply dependency ordering if dependencies exist
+        try:
+            dependency_analysis = self.dependency_manager.validate_dependencies(
+                [rule.id for rule in rules]
+            )
+
+            if dependency_analysis['is_valid'] and dependency_analysis['total_dependencies'] > 0:
+                # Get optimal execution order based on dependencies
+                ordered_rule_ids = self.dependency_manager.get_execution_order(
+                    [rule.id for rule in rules]
+                )
+
+                # Reorder rules according to dependency order
+                rule_dict = {rule.id: rule for rule in rules}
+                rules = [rule_dict[rule_id]
+                         for rule_id in ordered_rule_ids if rule_id in rule_dict]
+
+                self.logger.log_info(
+                    f"Applied dependency ordering",
+                    execution_id=execution_id,
+                    rules_count=len(rules),
+                    dependency_analysis=dependency_analysis
+                )
+            else:
+                self.logger.log_info(
+                    f"No dependencies found or invalid dependencies, using original order",
+                    execution_id=execution_id,
+                    dependency_analysis=dependency_analysis
+                )
+
+        except Exception as dep_error:
+            self.logger.log_warning(
+                f"Dependency management failed, using original rule order",
+                execution_id=execution_id,
+                exception=dep_error
+            )
 
         # Start execution tracking
         execution_metrics = self.logger.start_execution_tracking(

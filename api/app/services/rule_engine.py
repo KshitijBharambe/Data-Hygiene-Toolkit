@@ -701,7 +701,15 @@ class RegexValidator(RuleValidator):
 
 
 class CustomValidator(RuleValidator):
-    """Validator for custom user-defined validation logic"""
+    """Validator for custom user-defined validation logic with enhanced security"""
+
+    def __init__(self, rule: Rule, df: pd.DataFrame, db: Session):
+        super().__init__(rule, df, db)
+        # Initialize secure code validator
+        from app.security.sandbox import CustomCodeValidator
+        self.code_validator = CustomCodeValidator(
+            security_level=getattr(rule, 'security_level', 'medium')
+        )
 
     def validate(self) -> List[Dict[str, Any]]:
         issues = []
@@ -717,7 +725,7 @@ class CustomValidator(RuleValidator):
         return issues
 
     def _validate_python_expression(self) -> List[Dict[str, Any]]:
-        """Validate using Python expressions (be careful with security!)"""
+        """Validate using Python expressions with enhanced security"""
         issues = []
         expression = self.params.get('expression', '')
         target_columns = self.params.get('columns', [])
@@ -727,28 +735,38 @@ class CustomValidator(RuleValidator):
         if not expression or not target_columns:
             return issues
 
-        # Security: Only allow basic operations and pandas/numpy functions
-        allowed_names = {
-            'pd': pd, 'abs': abs, 'len': len, 'str': str, 'int': int, 'float': float,
-            'min': min, 'max': max, 'sum': sum, 'round': round
-        }
+        # Validate the expression for security first
+        if not self.code_validator.executor.validate_expression(expression):
+            logger.error(
+                f"Security validation failed for expression: {expression[:100]}")
+            return issues
 
-        for idx, row in self.df.iterrows():
+        for idx in self.df.index:
             try:
-                # Create context with row data and safe functions
-                context = allowed_names.copy()
-                context.update({col: row[col] for col in self.df.columns})
-                context['row'] = row
+                row = self.df.iloc[idx]
 
-                # Evaluate expression safely
-                result = eval(expression, {"__builtins__": {}}, context)
+                # Create safe context for execution
+                context = {
+                    'row': row.to_dict(),
+                    'pd': self._get_safe_pandas(),
+                }
+
+                # Add column values to context
+                for col in self.df.columns:
+                    if col not in context:
+                        context[col] = row[col] if pd.notna(row[col]) else None
+
+                # Execute expression securely
+                result = self.code_validator.execute_custom_validation(
+                    expression, context
+                )
 
                 # If result is False, it's an issue
                 if not result:
                     for column in target_columns:
                         if column in self.df.columns:
                             issues.append({
-                                'row_index': int(str(idx)) if not isinstance(idx, int) else idx,
+                                'row_index': int(idx),
                                 'column_name': column,
                                 'current_value': str(row[column]) if pd.notna(row[column]) else None,
                                 'suggested_value': '',
@@ -758,10 +776,30 @@ class CustomValidator(RuleValidator):
                             break  # Only add issue once per row
 
             except Exception as e:
-                # Skip rows where expression fails
+                # Log error but continue with other rows
+                logger.warning(
+                    f"Custom validation failed for row {idx}: {str(e)}")
                 continue
 
         return issues
+
+    def _get_safe_pandas(self):
+        """Get a safe pandas-like interface for basic operations."""
+        class SafePandas:
+            @staticmethod
+            def isna(value):
+                """Safe version of pandas.isna"""
+                return value is None or value == ''
+
+            @staticmethod
+            def to_numeric(value, errors='coerce'):
+                """Safe numeric conversion"""
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return None if errors == 'coerce' else value
+
+        return SafePandas()
 
     def _validate_lookup_table(self) -> List[Dict[str, Any]]:
         """Validate using lookup table mappings"""

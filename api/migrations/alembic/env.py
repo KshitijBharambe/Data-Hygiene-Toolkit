@@ -1,14 +1,14 @@
-from app import models  # Import all models so Alembic can detect them
-from app.database import Base
-from dotenv import load_dotenv
-from alembic import context
-from sqlalchemy import engine_from_config, pool
 from logging.config import fileConfig
+from sqlalchemy import engine_from_config, pool
+from alembic import context
+from dotenv import load_dotenv
+from app.database import Base
+from app import models  # Import all models so Alembic can detect them
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-# Import Base and Models
+# Add the api directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 # This is the Alembic Config object, which provides access to .ini values
@@ -33,17 +33,15 @@ if is_running_in_docker():
     else:
         raise ValueError("DATABASE_URL not set in Docker environment")
 else:
-    # Local development - load .env file
-    dotenv_loaded = load_dotenv(dotenv_path=".env.local", override=True)
-    print("📦 .env.local loaded?", dotenv_loaded)
+    # Local development - use provided DATABASE_URL
     local_db_url = os.getenv("DATABASE_URL")
-    print("🧪 DATABASE_URL:", local_db_url)
     if local_db_url:
         # Escape % characters for ConfigParser by doubling them
         escaped_url = local_db_url.replace('%', '%%')
         config.set_main_option("sqlalchemy.url", escaped_url)
+        print("🧪 Using DATABASE_URL:", local_db_url)
     else:
-        raise ValueError("DATABASE_URL not found in .env.local")
+        raise ValueError("DATABASE_URL not found in environment")
 
 # Optional: enable Alembic logging if using logging config
 if config.config_file_name is not None:
