@@ -55,7 +55,7 @@ export default NextAuth({
           }
 
           return null;
-        } catch (error: unknown) {
+        } catch {
           return null;
         }
       },
@@ -92,7 +92,7 @@ export default NextAuth({
           try {
             const apiClient = await getApiClient();
             apiClient.setToken(token.accessToken as string);
-          } catch (error) {
+          } catch {
             // Silently fail - token will be set on next API call
           }
         }

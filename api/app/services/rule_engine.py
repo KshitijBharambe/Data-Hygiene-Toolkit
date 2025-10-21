@@ -14,6 +14,10 @@ from app.models import (
 )
 from app.utils import ChunkedDataFrameReader, MemoryMonitor
 from app.services.rule_versioning import create_rule_snapshot, create_lightweight_rule_snapshot
+from app.validators.statistical_validators import (
+    StatisticalOutlierValidator, DistributionCheckValidator, CorrelationValidator
+)
+from app.services.anomaly_detection import MLAnomalyValidator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -862,6 +866,10 @@ class RuleEngineService:
             RuleKind.cross_field: CrossFieldValidator,
             RuleKind.regex: RegexValidator,
             RuleKind.custom: CustomValidator,
+            RuleKind.statistical_outlier: StatisticalOutlierValidator,
+            RuleKind.distribution_check: DistributionCheckValidator,
+            RuleKind.correlation_validation: CorrelationValidator,
+            RuleKind.ml_anomaly: MLAnomalyValidator,
         }
 
     def get_active_rules(self) -> List[Rule]:

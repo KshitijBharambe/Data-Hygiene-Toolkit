@@ -48,6 +48,10 @@ class RuleKind(enum.Enum):
     char_restriction = "char_restriction"
     regex = "regex"
     custom = "custom"
+    statistical_outlier = "statistical_outlier"
+    distribution_check = "distribution_check"
+    correlation_validation = "correlation_validation"
+    ml_anomaly = "ml_anomaly"
 
 
 class ExecutionStatus(enum.Enum):
@@ -380,3 +384,161 @@ class DataQualityMetrics(Base):
     # Relationships
     execution = relationship("Execution")
     dataset_version = relationship("DatasetVersion")
+
+
+# Advanced Features Models
+
+
+class RuleTemplate(Base):
+    __tablename__ = "rule_templates"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text)
+    # e.g., 'statistical', 'ml', 'validation'
+    category = Column(String, nullable=False, index=True)
+    template_kind = Column(ENUM(RuleKind), nullable=False)
+    template_params = Column(Text)  # JSON template with placeholders
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User")
+    suggestions = relationship("RuleSuggestion", back_populates="template")
+
+
+class RuleSuggestion(Base):
+    __tablename__ = "rule_suggestions"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    template_id = Column(String, ForeignKey(
+        "rule_templates.id"), nullable=True)
+    suggested_rule_name = Column(String, nullable=False)
+    suggested_params = Column(Text)  # JSON with filled-in parameters
+    confidence_score = Column(Integer)  # 0-100 confidence in suggestion
+    # 'template_based', 'ml_based', 'statistical'
+    suggestion_type = Column(String)
+    reasoning = Column(Text)  # Why this rule is suggested
+    is_applied = Column(Boolean, default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    applied_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    applied_by = Column(String, ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    dataset = relationship("Dataset")
+    template = relationship("RuleTemplate", back_populates="suggestions")
+    applier = relationship("User")
+
+
+class MLModel(Base):
+    __tablename__ = "ml_models"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    name = Column(String, nullable=False, index=True)
+    # 'isolation_forest', 'one_class_svm', etc.
+    model_type = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    model_path = Column(String)  # Path to serialized model file
+    # JSON with training parameters, feature names, etc.
+    model_metadata = Column(Text)
+    training_dataset_id = Column(
+        String, ForeignKey("datasets.id"), nullable=True)
+    # JSON with accuracy, precision, recall, etc.
+    training_metrics = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User")
+    anomaly_scores = relationship("AnomalyScore", back_populates="model")
+
+
+class AnomalyScore(Base):
+    __tablename__ = "anomaly_scores"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
+    model_id = Column(String, ForeignKey("ml_models.id"), nullable=False)
+    row_index = Column(Integer, nullable=False)
+    # 0-100, higher = more anomalous
+    anomaly_score = Column(Integer, nullable=False)
+    features_used = Column(Text)  # JSON list of feature names used for scoring
+    # JSON with actual feature values for this row
+    feature_values = Column(Text)
+    # Threshold that classified this as anomaly
+    threshold_used = Column(Integer)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    execution = relationship("Execution")
+    model = relationship("MLModel", back_populates="anomaly_scores")
+
+
+class StatisticalMetrics(Base):
+    __tablename__ = "statistical_metrics"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id", ondelete="CASCADE"), nullable=False)
+    column_name = Column(String, nullable=False)
+    # 'descriptive', 'distribution', 'correlation'
+    metric_type = Column(String, nullable=False)
+    # 'mean', 'std', 'skewness', etc.
+    metric_name = Column(String, nullable=False)
+    metric_value = Column(Integer)  # Store as integer for consistency
+    additional_data = Column(Text)  # JSON for complex metrics like histograms
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    dataset_version = relationship("DatasetVersion")
+
+
+class DatasetProfile(Base):
+    __tablename__ = "dataset_profiles"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id", ondelete="CASCADE"), nullable=False, unique=True)
+    profile_summary = Column(Text)  # JSON with overall dataset statistics
+    column_profiles = Column(Text)  # JSON with detailed column statistics
+    data_quality_score = Column(Integer)  # 0-100 overall quality score
+    recommendations = Column(Text)  # JSON with rule suggestions
+    profiling_version = Column(String, default="1.0")
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    dataset_version = relationship("DatasetVersion")
+
+
+class DebugSession(Base):
+    __tablename__ = "debug_sessions"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
+    session_name = Column(String, nullable=False)
+    debug_data = Column(Text)  # JSON with execution traces, performance data
+    breakpoints = Column(Text)  # JSON with debug breakpoints
+    # JSON with variable states at different points
+    variable_snapshots = Column(Text)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    execution = relationship("Execution")
+    creator = relationship("User")

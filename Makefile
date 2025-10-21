@@ -1,9 +1,9 @@
+# ============================================================================
 # Data Hygiene Toolkit - Makefile
-# Production Simulation Environment Management
+# Production-Grade Development & Deployment
+# ============================================================================
 
-.PHONY: help dev prod-sim prod-sim-build prod-sim-up prod-sim-down prod-sim-restart prod-sim-logs prod-sim-clean prod-sim-status supabase-start supabase-stop supabase-reset supabase-migrate health-check test
-
-# Default target
+.PHONY: help
 .DEFAULT_GOAL := help
 
 # Colors for output
@@ -11,9 +11,14 @@ BLUE := \033[0;34m
 GREEN := \033[0;32m
 YELLOW := \033[0;33m
 RED := \033[0;31m
-NC := \033[0m # No Color
+NC := \033[0m
 
-# Enable Docker BuildKit for optimized builds
+# Docker Compose files
+COMPOSE := docker compose -f docker/compose/docker-compose.yml
+COMPOSE_DEV := $(COMPOSE) -f docker/compose/docker-compose.dev.yml
+COMPOSE_PROD_SIM := $(COMPOSE) -f docker/compose/docker-compose.prod-sim.yml
+
+# Enable Docker BuildKit
 export DOCKER_BUILDKIT := 1
 export COMPOSE_DOCKER_CLI_BUILD := 1
 
@@ -24,263 +29,275 @@ help: ## Display this help message
 	@echo ""
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make $(YELLOW)<target>$(NC)\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  $(GREEN)%-25s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(BLUE)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-##@ Local Development (Current Setup)
+##@ Local Development
 
-dev: ## Start local development environment (docker-compose.yml)
+dev: ## Start local development environment (hot reload)
 	@echo "$(GREEN)Starting local development environment...$(NC)"
-	docker-compose up -d
+	@if [ ! -f .env ]; then \
+		echo "$(YELLOW)Creating .env from .env.example$(NC)"; \
+		cp .env.example .env; \
+	fi
+	@$(COMPOSE_DEV) up -d
 	@echo "$(GREEN)✓ Development environment started$(NC)"
-	@echo "  API: http://localhost:8000"
-	@echo "  Frontend: http://localhost:3000"
-	@echo "  Docs: http://localhost:8000/docs"
-
-dev-logs: ## View local development logs
-	docker-compose logs -f
-
-dev-down: ## Stop local development environment
-	@echo "$(YELLOW)Stopping local development environment...$(NC)"
-	docker-compose down
-	@echo "$(GREEN)✓ Development environment stopped$(NC)"
-
-##@ Production Simulation Environment
-
-prod-sim: prod-sim-build prod-sim-up ## Build and start production simulation environment
-
-prod-sim-build: ## Build production simulation containers (optimized with BuildKit)
-	@echo "$(GREEN)Building production simulation containers with optimizations...$(NC)"
-	@if [ ! -f .env.prod-sim ]; then \
-		echo "$(YELLOW)Warning: .env.prod-sim not found, using defaults$(NC)"; \
-	fi
-	@echo "$(BLUE)🔧 Using Docker BuildKit for faster builds$(NC)"
-	@docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim build --parallel --compress
-	@echo "$(GREEN)✓ Build complete$(NC)"
-	@echo "$(BLUE)📊 Image sizes:$(NC)"
-	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "(prodsim|REPOSITORY)" | head -5 || true
-
-prod-sim-up: ## Start production simulation environment
-	@echo "$(GREEN)Starting production simulation environment...$(NC)"
-	@if [ ! -f .env.prod-sim ]; then \
-		echo "$(RED)Error: .env.prod-sim not found!$(NC)"; \
-		echo "$(YELLOW)Creating from template...$(NC)"; \
-		cp .env.example .env.prod-sim; \
-		echo "$(YELLOW)Please configure .env.prod-sim and run again$(NC)"; \
-		exit 1; \
-	fi
-	@docker-compose -f docker-compose.prod-sim.yml --env-file .env.prod-sim up -d
-	@echo "$(GREEN)✓ Production simulation environment started$(NC)"
 	@echo ""
 	@echo "$(BLUE)Services available at:$(NC)"
-	@echo "  Frontend:        http://localhost:3000"
-	@echo "  API:            http://localhost:8000"
-	@echo "  API Docs:       http://localhost:8000/docs"
-	@echo "  Supabase Kong:  http://localhost:54321"
-	@echo "  Supabase Studio: http://localhost:54323"
-	@echo "  Inbucket (Email): http://localhost:54324"
-	@echo "  PostgreSQL:     localhost:54322"
-	@echo "  pgBouncer:      localhost:54329"
+	@echo "  Frontend:      http://localhost:3000"
+	@echo "  API:           http://localhost:8000"
+	@echo "  API Docs:      http://localhost:8000/docs"
+	@echo "  MinIO Console: http://localhost:9001 (minioadmin/minioadmin)"
+	@echo "  PostgreSQL:    localhost:5432 (admin/devpassword)"
 	@echo ""
-	@echo "$(YELLOW)Run 'make health-check' to verify all services$(NC)"
+	@echo "$(YELLOW)Run 'make logs' to view logs$(NC)"
 
-prod-sim-down: ## Stop production simulation environment
-	@echo "$(YELLOW)Stopping production simulation environment...$(NC)"
-	@docker-compose -f docker-compose.prod-sim.yml down
-	@echo "$(GREEN)✓ Production simulation environment stopped$(NC)"
+stop: ## Stop all containers
+	@echo "$(YELLOW)Stopping containers...$(NC)"
+	@$(COMPOSE_DEV) down
+	@echo "$(GREEN)✓ Containers stopped$(NC)"
 
-prod-sim-restart: ## Restart production simulation environment
-	@echo "$(YELLOW)Restarting production simulation environment...$(NC)"
-	@docker-compose -f docker-compose.prod-sim.yml restart
-	@echo "$(GREEN)✓ Production simulation environment restarted$(NC)"
+restart: ## Restart all containers
+	@echo "$(YELLOW)Restarting containers...$(NC)"
+	@$(COMPOSE_DEV) restart
+	@echo "$(GREEN)✓ Containers restarted$(NC)"
 
-prod-sim-logs: ## View production simulation logs (use SERVICE=<name> for specific service)
-	@if [ -z "$(SERVICE)" ]; then \
-		docker-compose -f docker-compose.prod-sim.yml logs -f; \
-	else \
-		docker-compose -f docker-compose.prod-sim.yml logs -f $(SERVICE); \
+logs: ## Tail logs from all containers
+	@$(COMPOSE_DEV) logs -f
+
+logs-api: ## Tail API logs only
+	@$(COMPOSE_DEV) logs -f backend
+
+logs-frontend: ## Tail frontend logs only
+	@$(COMPOSE_DEV) logs -f frontend
+
+logs-db: ## Tail database logs only
+	@$(COMPOSE_DEV) logs -f postgres
+
+##@ Production Simulation
+
+prod-sim: prod-sim-build prod-sim-up ## Build and start production simulation
+
+prod-sim-build: ## Build production simulation containers
+	@echo "$(GREEN)Building production containers...$(NC)"
+	@if [ ! -f .env.prod-sim ]; then \
+		echo "$(YELLOW)Creating .env.prod-sim from .env.prod-sim.example$(NC)"; \
+		cp .env.prod-sim.example .env.prod-sim; \
 	fi
+	@$(COMPOSE_PROD_SIM) build --parallel
+	@echo "$(GREEN)✓ Build complete$(NC)"
 
-prod-sim-clean: prod-sim-down ## Clean production simulation environment (remove volumes)
-	@echo "$(RED)Cleaning production simulation environment...$(NC)"
-	@echo "$(YELLOW)This will remove all volumes and data!$(NC)"
+prod-sim-up: ## Start production simulation
+	@echo "$(GREEN)Starting production simulation...$(NC)"
+	@$(COMPOSE_PROD_SIM) up -d
+	@echo "$(GREEN)✓ Production simulation started$(NC)"
+	@echo ""
+	@echo "$(BLUE)Services available at:$(NC)"
+	@echo "  Frontend: http://localhost:3000"
+	@echo "  API:      http://localhost:8000"
+	@echo "  API Docs: http://localhost:8000/docs"
+	@echo ""
+	@echo "$(YELLOW)Run 'make prod-sim-logs' to view logs$(NC)"
+	@echo "$(YELLOW)Run 'make health-check' to verify services$(NC)"
+
+prod-sim-down: ## Stop production simulation
+	@echo "$(YELLOW)Stopping production simulation...$(NC)"
+	@$(COMPOSE_PROD_SIM) down
+	@echo "$(GREEN)✓ Production simulation stopped$(NC)"
+
+prod-sim-restart: ## Restart production simulation
+	@$(COMPOSE_PROD_SIM) restart
+	@echo "$(GREEN)✓ Production simulation restarted$(NC)"
+
+prod-sim-logs: ## View production simulation logs
+	@$(COMPOSE_PROD_SIM) logs -f
+
+prod-sim-clean: ## Clean production simulation (remove volumes)
+	@echo "$(RED)This will remove all volumes and data!$(NC)"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		docker-compose -f docker-compose.prod-sim.yml down -v; \
-		echo "$(GREEN)✓ Production simulation environment cleaned$(NC)"; \
+		$(COMPOSE_PROD_SIM) down -v; \
+		echo "$(GREEN)✓ Production simulation cleaned$(NC)"; \
 	else \
 		echo "$(YELLOW)Cleanup cancelled$(NC)"; \
 	fi
 
-prod-sim-status: ## Show production simulation services status
-	@echo "$(BLUE)Production Simulation Services Status:$(NC)"
-	@docker-compose -f docker-compose.prod-sim.yml ps
+rebuild: prod-sim-clean prod-sim ## Full rebuild of production simulation
 
-##@ Supabase Commands
+##@ Database Operations
 
-supabase-start: ## Start Supabase local stack
-	@echo "$(GREEN)Starting Supabase local stack...$(NC)"
-	supabase start
-	@echo "$(GREEN)✓ Supabase started$(NC)"
-
-supabase-stop: ## Stop Supabase local stack
-	@echo "$(YELLOW)Stopping Supabase local stack...$(NC)"
-	supabase stop
-	@echo "$(GREEN)✓ Supabase stopped$(NC)"
-
-supabase-reset: ## Reset Supabase local database
-	@echo "$(RED)Resetting Supabase database...$(NC)"
-	supabase db reset
-	@echo "$(GREEN)✓ Supabase database reset$(NC)"
-
-supabase-migrate: ## Run Supabase migrations
-	@echo "$(GREEN)Running Supabase migrations...$(NC)"
-	supabase db push
-	@echo "$(GREEN)✓ Migrations applied$(NC)"
-
-supabase-status: ## Show Supabase status
-	@echo "$(BLUE)Supabase Status:$(NC)"
-	supabase status
-
-##@ Database Commands
-
-db-migrate: ## Run Alembic migrations (for API service)
+db-migrate: ## Run database migrations
 	@echo "$(GREEN)Running database migrations...$(NC)"
-	@if docker ps | grep -q prodsim-api; then \
-		docker-compose -f docker-compose.prod-sim.yml exec api alembic upgrade head; \
-	else \
-		docker-compose exec api alembic upgrade head; \
-	fi
+	@$(COMPOSE_DEV) exec backend alembic upgrade head
 	@echo "$(GREEN)✓ Migrations complete$(NC)"
 
-db-revision: ## Create new Alembic migration (use MESSAGE="description")
-	@if [ -z "$(MESSAGE)" ]; then \
-		echo "$(RED)Error: MESSAGE required$(NC)"; \
-		echo "Usage: make db-revision MESSAGE=\"your migration description\""; \
+db-migrate-create: ## Create new migration (usage: make db-migrate-create MSG="description")
+	@if [ -z "$(MSG)" ]; then \
+		echo "$(RED)Error: MSG required$(NC)"; \
+		echo "Usage: make db-migrate-create MSG=\"your migration description\""; \
 		exit 1; \
 	fi
-	@echo "$(GREEN)Creating migration: $(MESSAGE)$(NC)"
-	@if docker ps | grep -q prodsim-api; then \
-		docker-compose -f docker-compose.prod-sim.yml exec api alembic revision --autogenerate -m "$(MESSAGE)"; \
-	else \
-		docker-compose exec api alembic revision --autogenerate -m "$(MESSAGE)"; \
+	@echo "$(GREEN)Creating migration: $(MSG)$(NC)"
+	@$(COMPOSE_DEV) exec backend alembic revision --autogenerate -m "$(MSG)"
+
+db-shell: ## Open PostgreSQL shell
+	@echo "$(GREEN)Opening PostgreSQL shell...$(NC)"
+	@$(COMPOSE_DEV) exec postgres psql -U admin -d data_hygiene
+
+db-backup: ## Backup database to ./backups/
+	@mkdir -p backups
+	@echo "$(GREEN)Backing up database...$(NC)"
+	@$(COMPOSE_DEV) exec -T postgres pg_dump -U admin data_hygiene > backups/backup_$$(date +%Y%m%d_%H%M%S).sql
+	@echo "$(GREEN)✓ Database backed up to backups/$(NC)"
+
+db-restore: ## Restore database from backup (usage: make db-restore FILE=backup.sql)
+	@if [ -z "$(FILE)" ]; then \
+		echo "$(RED)Error: FILE required$(NC)"; \
+		echo "Usage: make db-restore FILE=backups/backup_20241019_120000.sql"; \
+		exit 1; \
 	fi
+	@echo "$(YELLOW)Restoring database from $(FILE)...$(NC)"
+	@$(COMPOSE_DEV) exec -T postgres psql -U admin data_hygiene < $(FILE)
+	@echo "$(GREEN)✓ Database restored$(NC)"
 
-db-shell: ## Connect to PostgreSQL shell
-	@echo "$(GREEN)Connecting to PostgreSQL...$(NC)"
-	@if docker ps | grep -q prodsim-supabase-db; then \
-		docker-compose -f docker-compose.prod-sim.yml exec db psql -U postgres; \
-	else \
-		docker-compose exec db psql -U postgres; \
-	fi
+##@ Storage (MinIO)
 
-##@ Health & Monitoring
+minio-ui: ## Open MinIO web console
+	@echo "$(BLUE)Opening MinIO console at http://localhost:9001$(NC)"
+	@echo "Credentials: minioadmin / minioadmin"
+	@open http://localhost:9001 || xdg-open http://localhost:9001 || echo "Open http://localhost:9001 manually"
 
-health-check: ## Check health of all production simulation services
-	@echo "$(BLUE)Checking service health...$(NC)"
-	@./scripts/prod-sim/health-check.sh
+init-buckets: ## Initialize MinIO buckets
+	@echo "$(GREEN)Initializing MinIO buckets...$(NC)"
+	@$(COMPOSE_DEV) up minio-init
+	@echo "$(GREEN)✓ Buckets initialized$(NC)"
 
-logs-api: ## View API logs
-	@docker-compose -f docker-compose.prod-sim.yml logs -f api
+##@ Container Access
 
-logs-frontend: ## View frontend logs
-	@docker-compose -f docker-compose.prod-sim.yml logs -f frontend
+shell-api: ## Enter backend container shell
+	@$(COMPOSE_DEV) exec backend sh
 
-logs-db: ## View database logs
-	@docker-compose -f docker-compose.prod-sim.yml logs -f db
+shell-frontend: ## Enter frontend container shell
+	@$(COMPOSE_DEV) exec frontend sh
+
+shell-db: ## Enter PostgreSQL container shell
+	@$(COMPOSE_DEV) exec postgres sh
 
 ##@ Testing
 
-test: ## Run tests
+test: ## Run all tests
 	@echo "$(GREEN)Running tests...$(NC)"
-	@if docker ps | grep -q prodsim-api; then \
-		docker-compose -f docker-compose.prod-sim.yml exec api pytest; \
-	else \
-		docker-compose exec api pytest; \
-	fi
+	@$(COMPOSE_DEV) exec backend pytest
+	@echo "$(GREEN)✓ Tests complete$(NC)"
+
+test-unit: ## Run unit tests only
+	@$(COMPOSE_DEV) exec backend pytest tests/unit
+
+test-integration: ## Run integration tests
+	@$(COMPOSE_DEV) exec backend pytest tests/integration
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(GREEN)Running tests with coverage...$(NC)"
-	@if docker ps | grep -q prodsim-api; then \
-		docker-compose -f docker-compose.prod-sim.yml exec api pytest --cov=app --cov-report=html; \
+	@$(COMPOSE_DEV) exec backend pytest --cov=app --cov-report=html
+	@echo "$(GREEN)✓ Coverage report generated in htmlcov/$(NC)"
+
+test-watch: ## Run tests in watch mode
+	@$(COMPOSE_DEV) exec backend pytest-watch
+
+##@ Code Quality
+
+lint: ## Run all linters
+	@echo "$(GREEN)Running linters...$(NC)"
+	@$(COMPOSE_DEV) exec backend black --check app/
+	@$(COMPOSE_DEV) exec backend ruff check app/
+	@$(COMPOSE_DEV) exec backend mypy app/
+
+format: ## Auto-format code
+	@echo "$(GREEN)Formatting code...$(NC)"
+	@$(COMPOSE_DEV) exec backend black app/
+	@$(COMPOSE_DEV) exec backend ruff check --fix app/
+	@$(COMPOSE_DEV) exec backend isort app/
+	@echo "$(GREEN)✓ Code formatted$(NC)"
+
+type-check: ## Run type checking
+	@$(COMPOSE_DEV) exec backend mypy app/
+
+##@ Health & Monitoring
+
+health-check: ## Check health of all services
+	@echo "$(BLUE)Checking service health...$(NC)"
+	@echo ""
+	@echo "$(BLUE)Backend API:$(NC)"
+	@curl -f http://localhost:8000/ && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo ""
+	@echo "$(BLUE)Frontend:$(NC)"
+	@curl -f http://localhost:3000/ && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo ""
+	@echo "$(BLUE)MinIO:$(NC)"
+	@curl -f http://localhost:9000/minio/health/live && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+	@echo ""
+	@echo "$(BLUE)PostgreSQL:$(NC)"
+	@$(COMPOSE_DEV) exec postgres pg_isready -U admin && echo "$(GREEN)✓ Healthy$(NC)" || echo "$(RED)✗ Unhealthy$(NC)"
+
+status: ## Show container status
+	@$(COMPOSE_DEV) ps
+
+docker-stats: ## Show Docker resource usage
+	@docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | grep -E "(dht-|CONTAINER)"
+
+##@ Cleanup
+
+clean: ## Stop and remove all containers
+	@echo "$(YELLOW)Cleaning up...$(NC)"
+	@$(COMPOSE_DEV) down
+	@$(COMPOSE_PROD_SIM) down
+	@echo "$(GREEN)✓ Cleanup complete$(NC)"
+
+clean-volumes: ## Remove all volumes (WARNING: deletes data!)
+	@echo "$(RED)This will remove ALL DATA!$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		$(COMPOSE_DEV) down -v; \
+		$(COMPOSE_PROD_SIM) down -v; \
+		echo "$(GREEN)✓ Volumes removed$(NC)"; \
 	else \
-		docker-compose exec api pytest --cov=app --cov-report=html; \
+		echo "$(YELLOW)Cleanup cancelled$(NC)"; \
 	fi
 
-##@ Maintenance
-
-clean-docker: ## Remove all stopped containers and dangling images
+clean-docker: ## Remove dangling images and containers
 	@echo "$(YELLOW)Cleaning Docker resources...$(NC)"
-	docker container prune -f
-	docker image prune -f
+	@docker container prune -f
+	@docker image prune -f
 	@echo "$(GREEN)✓ Docker cleaned$(NC)"
 
-clean-build-cache: ## Clean Docker build cache (keep 1GB)
-	@echo "$(YELLOW)Cleaning Docker build cache...$(NC)"
-	docker buildx prune --keep-storage=1GB -f || docker builder prune --keep-storage=1GB -f
-	@echo "$(GREEN)✓ Build cache cleaned$(NC)"
+clean-all: clean clean-volumes clean-docker ## Nuclear option: clean everything
 
-clean-all: prod-sim-clean dev-down clean-docker ## Clean everything (dev + prod-sim + docker)
-	@echo "$(GREEN)✓ All environments cleaned$(NC)"
+##@ Setup & Installation
 
-rebuild: prod-sim-clean prod-sim-build prod-sim-up ## Full rebuild of production simulation
-
-rebuild-optimized: ## Full rebuild with cache optimization
-	@echo "$(GREEN)Rebuilding with cache optimization...$(NC)"
-	@docker buildx prune --keep-storage=1GB -f || true
-	@$(MAKE) prod-sim-clean
-	@$(MAKE) prod-sim-build
-	@$(MAKE) prod-sim-up
-	@echo "$(GREEN)✓ Optimized rebuild complete$(NC)"
+setup: ## First-time project setup
+	@echo "$(GREEN)Setting up Data Hygiene Toolkit...$(NC)"
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "$(GREEN)✓ Created .env$(NC)"; \
+	fi
+	@if [ ! -f .env.prod-sim ]; then \
+		cp .env.prod-sim.example .env.prod-sim; \
+		echo "$(GREEN)✓ Created .env.prod-sim$(NC)"; \
+	fi
+	@chmod +x scripts/*.sh
+	@echo "$(GREEN)✓ Setup complete!$(NC)"
+	@echo "$(YELLOW)Run 'make dev' to start development$(NC)"
 
 ##@ Utility
 
-shell-api: ## Open shell in API container
-	@docker-compose -f docker-compose.prod-sim.yml exec api sh
-
-shell-frontend: ## Open shell in frontend container
-	@docker-compose -f docker-compose.prod-sim.yml exec frontend sh
-
-install-tools: ## Install required CLI tools (macOS)
-	@echo "$(GREEN)Installing required tools...$(NC)"
-	@if ! command -v supabase &> /dev/null; then \
-		echo "Installing Supabase CLI..."; \
-		brew install supabase/tap/supabase; \
-	fi
-	@if ! command -v flyctl &> /dev/null; then \
-		echo "Installing Fly CLI..."; \
-		brew install flyctl; \
-	fi
-	@if ! command -v vercel &> /dev/null; then \
-		echo "Installing Vercel CLI..."; \
-		npm install -g vercel; \
-	fi
-	@echo "$(GREEN)✓ Tools installed$(NC)"
-
-env-check: ## Check if required environment files exist
+env-check: ## Verify environment configuration
 	@echo "$(BLUE)Checking environment files...$(NC)"
-	@if [ -f .env ]; then \
-		echo "$(GREEN)✓ .env exists$(NC)"; \
-	else \
-		echo "$(RED)✗ .env missing$(NC)"; \
-	fi
-	@if [ -f .env.prod-sim ]; then \
-		echo "$(GREEN)✓ .env.prod-sim exists$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠ .env.prod-sim missing (will be created from template)$(NC)"; \
-	fi
-	@if [ -f frontend/.env.local ]; then \
-		echo "$(GREEN)✓ frontend/.env.local exists$(NC)"; \
-	else \
-		echo "$(RED)✗ frontend/.env.local missing$(NC)"; \
-	fi
+	@if [ -f .env ]; then echo "$(GREEN)✓ .env exists$(NC)"; else echo "$(RED)✗ .env missing$(NC)"; fi
+	@if [ -f .env.prod-sim ]; then echo "$(GREEN)✓ .env.prod-sim exists$(NC)"; else echo "$(YELLOW)⚠ .env.prod-sim missing$(NC)"; fi
 
-docker-stats: ## Show Docker resource usage for prod-sim containers
-	@echo "$(BLUE)📈 Resource usage:$(NC)"
-	@docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}" | grep -E "(prodsim|CONTAINER)" || echo "$(YELLOW)No prod-sim containers running$(NC)"
-
-docker-info: ## Show Docker build info and configuration
-	@echo "$(BLUE)🐳 Docker Build Configuration:$(NC)"
-	@echo "  BuildKit Enabled: $${DOCKER_BUILDKIT:-not set}"
-	@echo "  Compose CLI Build: $${COMPOSE_DOCKER_CLI_BUILD:-not set}"
+docker-info: ## Show Docker configuration
+	@echo "$(BLUE)Docker Configuration:$(NC)"
+	@echo "  BuildKit: ${DOCKER_BUILDKIT}"
+	@echo "  Compose CLI Build: ${COMPOSE_DOCKER_CLI_BUILD}"
 	@echo ""
-	@echo "$(BLUE)📦 Docker Images:$(NC)"
-	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" | grep -E "(api|frontend|REPOSITORY)" || true
+	@echo "$(BLUE)Images:$(NC)"
+	@docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "(dht|REPOSITORY)" || true

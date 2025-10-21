@@ -1,0 +1,78 @@
+# ============================================================================
+# Production Environment Configuration
+# Data Hygiene Toolkit - GCP
+# 
+# Copy this file to prod.tfvars and fill in your values
+# Usage: terraform apply -var-file=environments/prod.tfvars
+# ============================================================================
+
+# GCP Project Configuration
+project_id = "YOUR_PROJECT_ID"  # Replace with your GCP project ID
+region     = "us-central1"       # Free tier eligible region
+zone       = "us-central1-a"
+
+# Application Configuration
+app_name    = "data-hygiene-toolkit"
+environment = "prod"
+
+# Domain Configuration (optional - configure after deployment)
+domain_name = "api.kshitij.space"  # Your custom domain
+
+# Cloud Run Configuration
+cloud_run_image = "gcr.io/YOUR_PROJECT_ID/data-hygiene-backend:latest"  # Update after first build
+
+# Scaling
+cloud_run_min_instances = 0    # Scale to zero for cost savings
+cloud_run_max_instances = 10   # Maximum instances
+cloud_run_concurrency   = 80   # Requests per instance
+
+# Resources
+cloud_run_cpu    = "1000m"  # 1 vCPU
+cloud_run_memory = "512Mi"  # 512MB RAM
+cloud_run_timeout = 300     # 5 minutes
+
+# Cloud SQL Configuration
+db_name               = "data_hygiene"
+db_user               = "dbadmin"
+db_tier               = "db-f1-micro"  # Free tier eligible
+db_disk_size          = 10              # 10GB minimum
+db_disk_type          = "PD_SSD"
+db_backup_enabled     = true
+db_backup_start_time  = "03:00"        # 3 AM UTC
+db_high_availability  = false          # Costs extra
+
+# Cloud Storage Configuration
+storage_bucket_name   = "data-hygiene-prod-YOUR_PROJECT_ID"  # Must be globally unique
+storage_location      = "US"                                  # Multi-region
+storage_class         = "STANDARD"
+storage_versioning    = true
+storage_lifecycle_age = 90  # Delete objects after 90 days
+
+# JWT Configuration (CHANGE THESE VALUES!)
+jwt_secret_key     = "CHANGE-ME-generate-with-openssl-rand-base64-32"
+jwt_algorithm      = "HS256"
+jwt_expire_minutes = 30
+
+# CORS Configuration
+cors_origins = [
+  "https://www.dht.kshitij.space",  # Your frontend domain
+  "https://dht.kshitij.space",
+  "http://localhost:3000"  # For local testing
+]
+
+# Networking Configuration
+vpc_name           = "data-hygiene-vpc"
+subnet_cidr        = "10.0.0.0/24"
+vpc_connector_cidr = "10.8.0.0/28"
+
+# Resource Labels
+labels = {
+  project     = "data-hygiene-toolkit"
+  environment = "production"
+  managed_by  = "terraform"
+  owner       = "kshitij"
+}
+
+# Cost Management
+budget_amount           = 0     # Stay on free tier
+budget_alert_threshold  = 0.8   # Alert at 80%

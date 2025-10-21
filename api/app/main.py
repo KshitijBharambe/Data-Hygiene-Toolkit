@@ -9,6 +9,7 @@ from app.routes import processing
 from app.routes import reports
 from app.routes import issues
 from app.routes import search
+from app.routes import advanced_features
 import logging
 import traceback
 
@@ -27,6 +28,8 @@ app = FastAPI(
 )
 
 # Global exception handler for better error logging
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Global exception handler caught: {type(exc).__name__}")
@@ -67,6 +70,7 @@ app.include_router(processing.router)
 app.include_router(reports.router)
 app.include_router(issues.router)
 app.include_router(search.router)
+app.include_router(advanced_features.router)
 
 
 @app.get("/")

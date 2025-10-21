@@ -35,9 +35,10 @@ class ApiClient {
 
   constructor(baseURL: string = getApiUrl()) {
     // Ensure HTTPS in production
-    const secureURL = baseURL.startsWith('http://') && baseURL.includes('fly.dev')
-      ? baseURL.replace('http://', 'https://')
-      : baseURL;
+    const secureURL =
+      baseURL.startsWith("http://") && baseURL.includes("fly.dev")
+        ? baseURL.replace("http://", "https://")
+        : baseURL;
 
     this.client = axios.create({
       baseURL: secureURL,
@@ -72,7 +73,7 @@ class ApiClient {
     if (typeof window !== "undefined") {
       try {
         this.token = localStorage.getItem("auth_token");
-      } catch (error) {
+      } catch {
         this.token = null;
       }
     }
@@ -321,7 +322,9 @@ class ApiClient {
     return response.data;
   }
 
-  async getExecutionQualityMetrics(executionId: string): Promise<QualityMetrics> {
+  async getExecutionQualityMetrics(
+    executionId: string
+  ): Promise<QualityMetrics> {
     const response = await this.client.get<QualityMetrics>(
       `/executions/${executionId}/quality-metrics`
     );
@@ -334,13 +337,13 @@ class ApiClient {
     page: number = 1,
     size: number = 1000
   ): Promise<PaginatedResponse<Issue>> {
-    const params: Record<string, unknown> = { limit: size, offset: (page - 1) * size };
+    const params: Record<string, unknown> = {
+      limit: size,
+      offset: (page - 1) * size,
+    };
     if (executionId) params.execution_id = executionId;
 
-    const response = await this.client.get<Issue[]>(
-      "/issues",
-      { params }
-    );
+    const response = await this.client.get<Issue[]>("/issues", { params });
 
     // Convert array response to paginated format
     const issues = Array.isArray(response.data) ? response.data : [];
@@ -460,9 +463,12 @@ class ApiClient {
   }
 
   async getQualityTrends(days: number = 30): Promise<unknown> {
-    const response = await this.client.get("/reports/analytics/quality-trends", {
-      params: { days },
-    });
+    const response = await this.client.get(
+      "/reports/analytics/quality-trends",
+      {
+        params: { days },
+      }
+    );
     return response.data;
   }
 
@@ -633,8 +639,8 @@ const apiClient = new Proxy({} as ApiClient, {
   get(_target, prop: string) {
     const inst = getInstance();
     const value = inst[prop as keyof ApiClient];
-    return typeof value === 'function' ? value.bind(inst) : value;
-  }
+    return typeof value === "function" ? value.bind(inst) : value;
+  },
 });
 
 export default apiClient;

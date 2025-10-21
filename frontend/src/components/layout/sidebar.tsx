@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   BarChart3,
   Database,
@@ -21,181 +21,217 @@ import {
   CheckSquare,
   Activity,
   Download,
-  X
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { useSession } from 'next-auth/react'
-import { useDashboardOverview } from '@/lib/hooks/useDashboard'
-import { DashboardOverview } from '@/types/api'
+  X,
+  Brain,
+  Lightbulb,
+  Bug,
+  Zap,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useSession } from "next-auth/react";
+import { useDashboardOverview } from "@/lib/hooks/useDashboard";
+import { DashboardOverview } from "@/types/api";
 
 interface SidebarProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 interface NavItem {
-  title: string
-  href?: string
-  icon: React.ComponentType<{ className?: string }>
-  badge?: string | number
-  children?: NavItem[]
-  roles?: string[]
+  title: string;
+  href?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: string | number;
+  children?: NavItem[];
+  roles?: string[];
 }
 
-function getNavigationItems(dashboardData: DashboardOverview | undefined): NavItem[] {
+function getNavigationItems(
+  dashboardData: DashboardOverview | undefined
+): NavItem[] {
   return [
     {
-      title: 'Dashboard',
-      href: '/dashboard',
+      title: "Dashboard",
+      href: "/dashboard",
       icon: Home,
     },
     {
-      title: 'Data Management',
+      title: "Data Management",
       icon: Database,
       children: [
         {
-          title: 'Upload Data',
-          href: '/data/upload',
+          title: "Upload Data",
+          href: "/data/upload",
           icon: Upload,
         },
         {
-          title: 'Datasets',
-          href: '/data/datasets',
+          title: "Datasets",
+          href: "/data/datasets",
           icon: FileSpreadsheet,
           badge: dashboardData?.overview.total_datasets?.toString(),
         },
         {
-          title: 'Data Profile',
-          href: '/data/profile',
+          title: "Data Profile",
+          href: "/data/profile",
           icon: BarChart3,
         },
       ],
     },
     {
-      title: 'Quality Rules',
+      title: "Quality Rules",
       icon: Shield,
       children: [
         {
-          title: 'All Rules',
-          href: '/rules',
+          title: "All Rules",
+          href: "/rules",
           icon: CheckSquare,
         },
         {
-          title: 'Create Rule',
-          href: '/rules/create',
+          title: "Create Rule",
+          href: "/rules/create",
           icon: Settings,
         },
       ],
     },
     {
-      title: 'Execution',
+      title: "Execution",
       icon: Activity,
       children: [
         {
-          title: 'Run Rules',
-          href: '/executions/create',
+          title: "Run Rules",
+          href: "/executions/create",
           icon: Play,
         },
         {
-          title: 'All Executions',
-          href: '/executions',
+          title: "All Executions",
+          href: "/executions",
           icon: Activity,
           badge: dashboardData?.overview.total_executions?.toString(),
         },
       ],
     },
     {
-      title: 'Issues',
-      href: '/issues',
+      title: "Issues",
+      href: "/issues",
       icon: AlertTriangle,
-      badge: dashboardData ? (dashboardData.overview.total_issues - dashboardData.overview.total_fixes)?.toString() : undefined,
+      badge: dashboardData
+        ? (
+            dashboardData.overview.total_issues -
+            dashboardData.overview.total_fixes
+          )?.toString()
+        : undefined,
     },
     {
-      title: 'Reports',
+      title: "Reports",
       icon: FileText,
       children: [
         {
-          title: 'Quality Reports',
-          href: '/reports/quality',
+          title: "Quality Reports",
+          href: "/reports/quality",
           icon: BarChart3,
         },
         {
-          title: 'Export Data',
-          href: '/reports/export',
+          title: "Export Data",
+          href: "/reports/export",
           icon: Download,
         },
       ],
     },
     {
-      title: 'Administration',
-      icon: Settings,
-      roles: ['admin'],
+      title: "Advanced Features",
+      icon: Zap,
       children: [
         {
-          title: 'Users',
-          href: '/admin/users',
-          icon: Users,
-          roles: ['admin'],
+          title: "ML Models",
+          href: "/ml-models",
+          icon: Brain,
         },
         {
-          title: 'System Settings',
-          href: '/admin/settings',
-          icon: Settings,
-          roles: ['admin'],
+          title: "Rule Templates",
+          href: "/templates",
+          icon: Lightbulb,
+        },
+        {
+          title: "Debug Tools",
+          href: "/debug",
+          icon: Bug,
         },
       ],
     },
-  ]
+    {
+      title: "Administration",
+      icon: Settings,
+      roles: ["admin"],
+      children: [
+        {
+          title: "Users",
+          href: "/admin/users",
+          icon: Users,
+          roles: ["admin"],
+        },
+        {
+          title: "System Settings",
+          href: "/admin/settings",
+          icon: Settings,
+          roles: ["admin"],
+        },
+      ],
+    },
+  ];
 }
 
 function NavItemComponent({
   item,
   level = 0,
   isExpanded = false,
-  onToggleExpanded
+  onToggleExpanded,
 }: {
   item: NavItem;
   level?: number;
   isExpanded?: boolean;
   onToggleExpanded?: () => void;
 }) {
-  const pathname = usePathname()
-  const { data: session } = useSession()
+  const pathname = usePathname();
+  const { data: session } = useSession();
 
-  const isActive = item.href === pathname
-  const hasActiveChild = item.children?.some(child =>
-    child.href === pathname ||
-    (child.children && child.children.some(grandchild => grandchild.href === pathname))
-  )
+  const isActive = item.href === pathname;
+  const hasActiveChild = item.children?.some(
+    (child) =>
+      child.href === pathname ||
+      (child.children &&
+        child.children.some((grandchild) => grandchild.href === pathname))
+  );
 
   // Check if user has permission to see this item - after hooks
-  if (item.roles && !item.roles.includes(session?.user?.role || '')) {
-    return null
+  if (item.roles && !item.roles.includes(session?.user?.role || "")) {
+    return null;
   }
 
   // For items with children, use the expanded state from parent
   // For items without children, expand if they have active children
-  const shouldBeExpanded = item.children ? isExpanded || hasActiveChild : false
+  const shouldBeExpanded = item.children ? isExpanded || hasActiveChild : false;
 
   const handleClick = () => {
     if (item.children && onToggleExpanded) {
-      onToggleExpanded()
+      onToggleExpanded();
     }
-  }
+  };
 
   const itemContent = (
-    <div className={cn(
-      'flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors',
-      level > 0 && 'ml-4',
-      isActive && 'bg-primary text-primary-foreground',
-      !isActive && 'hover:bg-muted',
-      hasActiveChild && !isActive && 'bg-muted/50'
-    )}>
+    <div
+      className={cn(
+        "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors",
+        level > 0 && "ml-4",
+        isActive && "bg-primary text-primary-foreground",
+        !isActive && "hover:bg-muted",
+        hasActiveChild && !isActive && "bg-muted/50"
+      )}
+    >
       <item.icon className="h-4 w-4" />
       <span className="flex-1 text-sm font-medium">{item.title}</span>
       {item.badge && (
-        <Badge variant={isActive ? 'secondary' : 'outline'} className="text-xs">
+        <Badge variant={isActive ? "secondary" : "outline"} className="text-xs">
           {item.badge}
         </Badge>
       )}
@@ -209,7 +245,7 @@ function NavItemComponent({
         </div>
       )}
     </div>
-  )
+  );
 
   return (
     <div>
@@ -237,64 +273,73 @@ function NavItemComponent({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { data: dashboardData } = useDashboardOverview()
-  const navigationItems = getNavigationItems(dashboardData)
-  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({})
-  const [mounted, setMounted] = useState(false)
-  const pathname = usePathname()
+  const { data: dashboardData } = useDashboardOverview();
+  const navigationItems = getNavigationItems(dashboardData);
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [mounted, setMounted] = useState(false);
+  const pathname = usePathname();
 
   // Initialize expanded states from localStorage
   useEffect(() => {
-    const savedStates = localStorage.getItem('sidebar-expanded-items')
+    const savedStates = localStorage.getItem("sidebar-expanded-items");
     if (savedStates) {
-      setExpandedItems(JSON.parse(savedStates))
+      setExpandedItems(JSON.parse(savedStates));
     }
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
   // Auto-expand items with active children
   useEffect(() => {
     if (mounted && navigationItems) {
-      setExpandedItems(prev => {
-        const newExpandedItems = { ...prev }
-        let hasChanges = false
+      setExpandedItems((prev) => {
+        const newExpandedItems = { ...prev };
+        let hasChanges = false;
 
-        navigationItems.forEach(item => {
+        navigationItems.forEach((item) => {
           if (item.children) {
-            const hasActiveChild = item.children.some(child =>
-              child.href === pathname ||
-              (child.children && child.children.some(grandchild => grandchild.href === pathname))
-            )
+            const hasActiveChild = item.children.some(
+              (child) =>
+                child.href === pathname ||
+                (child.children &&
+                  child.children.some(
+                    (grandchild) => grandchild.href === pathname
+                  ))
+            );
 
             if (hasActiveChild && !newExpandedItems[item.title]) {
-              newExpandedItems[item.title] = true
-              hasChanges = true
+              newExpandedItems[item.title] = true;
+              hasChanges = true;
             }
           }
-        })
+        });
 
-        return hasChanges ? newExpandedItems : prev
-      })
+        return hasChanges ? newExpandedItems : prev;
+      });
     }
-  }, [pathname, mounted, navigationItems])
+  }, [pathname, mounted, navigationItems]);
 
   // Persist expanded states to localStorage
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem('sidebar-expanded-items', JSON.stringify(expandedItems))
+      localStorage.setItem(
+        "sidebar-expanded-items",
+        JSON.stringify(expandedItems)
+      );
     }
-  }, [expandedItems, mounted])
+  }, [expandedItems, mounted]);
 
   const toggleExpanded = (itemTitle: string) => {
-    setExpandedItems(prev => ({
+    setExpandedItems((prev) => ({
       ...prev,
-      [itemTitle]: !prev[itemTitle]
-    }))
-  }
+      [itemTitle]: !prev[itemTitle],
+    }));
+  };
 
   return (
     <>
@@ -307,12 +352,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       {/* Sidebar */}
-      <aside className={cn(
-        // Base: fixed sidebar that slides in/out
-        'fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 bg-background border-r transition-transform duration-200 ease-in-out',
-        // State: show/hide based on isOpen prop
-        isOpen ? 'translate-x-0' : '-translate-x-full'
-      )}>
+      <aside
+        className={cn(
+          // Base: fixed sidebar that slides in/out
+          "fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-64 bg-background border-r transition-transform duration-200 ease-in-out",
+          // State: show/hide based on isOpen prop
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
         <div className="flex h-full flex-col">
           {/* Mobile close button */}
           <div className="flex items-center justify-between p-4 border-b md:hidden">
@@ -352,7 +399,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <span>Open Issues</span>
                   <Badge variant="destructive">
                     {dashboardData
-                      ? dashboardData.overview.total_issues - dashboardData.overview.total_fixes
+                      ? dashboardData.overview.total_issues -
+                        dashboardData.overview.total_fixes
                       : 0}
                   </Badge>
                 </div>
@@ -368,5 +416,5 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
       </aside>
     </>
-  )
+  );
 }

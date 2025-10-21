@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,7 +22,7 @@ import {
   AlertCircle,
   FileText,
   Database,
-  Loader2
+  Loader2,
 } from "lucide-react";
 import {
   useUnappliedFixes,
@@ -53,7 +52,8 @@ export function ApplyFixesDialog({
   const [reRunRules, setReRunRules] = useState(false);
 
   // Fetch unapplied fixes for this version
-  const { data: unappliedFixes, isLoading: fixesLoading } = useUnappliedFixes(versionId);
+  const { data: unappliedFixes, isLoading: fixesLoading } =
+    useUnappliedFixes(versionId);
   const applyFixesMutation = useApplyFixesMutation();
 
   // Reset state when dialog opens/closes
@@ -69,14 +69,22 @@ export function ApplyFixesDialog({
   const groupedFixes = useMemo(() => {
     if (!unappliedFixes) return { critical: [], high: [], medium: [], low: [] };
 
-    return unappliedFixes.reduce((acc, fix) => {
-      const severity = fix.severity.toLowerCase();
-      if (severity === "critical") acc.critical.push(fix);
-      else if (severity === "high") acc.high.push(fix);
-      else if (severity === "medium") acc.medium.push(fix);
-      else acc.low.push(fix);
-      return acc;
-    }, { critical: [] as UnappliedFix[], high: [] as UnappliedFix[], medium: [] as UnappliedFix[], low: [] as UnappliedFix[] });
+    return unappliedFixes.reduce(
+      (acc, fix) => {
+        const severity = fix.severity.toLowerCase();
+        if (severity === "critical") acc.critical.push(fix);
+        else if (severity === "high") acc.high.push(fix);
+        else if (severity === "medium") acc.medium.push(fix);
+        else acc.low.push(fix);
+        return acc;
+      },
+      {
+        critical: [] as UnappliedFix[],
+        high: [] as UnappliedFix[],
+        medium: [] as UnappliedFix[],
+        low: [] as UnappliedFix[],
+      }
+    );
   }, [unappliedFixes]);
 
   const handleToggleFix = (fixId: string) => {
@@ -91,7 +99,7 @@ export function ApplyFixesDialog({
 
   const handleSelectAll = () => {
     if (unappliedFixes) {
-      setSelectedFixIds(new Set(unappliedFixes.map(f => f.fix_id)));
+      setSelectedFixIds(new Set(unappliedFixes.map((f) => f.fix_id)));
     }
   };
 
@@ -124,7 +132,8 @@ export function ApplyFixesDialog({
       console.error("Apply fixes error:", error);
       const errorMessage =
         error && typeof error === "object" && "response" in error
-          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          ? (error as { response?: { data?: { detail?: string } } }).response
+              ?.data?.detail
           : "Failed to apply fixes";
       toast.error(errorMessage || "Failed to apply fixes");
     }
@@ -145,14 +154,17 @@ export function ApplyFixesDialog({
     }
   };
 
-  const renderFixGroup = (title: string, fixes: UnappliedFix[], color: string) => {
+  const renderFixGroup = (title: string, fixes: UnappliedFix[]) => {
     if (fixes.length === 0) return null;
 
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <h4 className="text-sm font-semibold">{title}</h4>
-          <Badge variant={getSeverityColor(title.toLowerCase())} className="text-xs">
+          <Badge
+            variant={getSeverityColor(title.toLowerCase())}
+            className="text-xs"
+          >
             {fixes.length}
           </Badge>
         </div>
@@ -172,7 +184,9 @@ export function ApplyFixesDialog({
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium">Row {fix.row_index}</span>
                   <span className="text-muted-foreground">•</span>
-                  <span className="text-muted-foreground">{fix.column_name}</span>
+                  <span className="text-muted-foreground">
+                    {fix.column_name}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   {fix.current_value && (
@@ -190,7 +204,9 @@ export function ApplyFixesDialog({
                   )}
                 </div>
                 {fix.comment && (
-                  <p className="text-xs text-muted-foreground mt-1">{fix.comment}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {fix.comment}
+                  </p>
                 )}
               </div>
             </div>
@@ -209,7 +225,8 @@ export function ApplyFixesDialog({
             Apply Fixes & Create New Version
           </DialogTitle>
           <DialogDescription>
-            Select fixes to apply to {datasetName} (v{versionNumber}) and create a new version
+            Select fixes to apply to {datasetName} (v{versionNumber}) and create
+            a new version
           </DialogDescription>
         </DialogHeader>
 
@@ -223,8 +240,8 @@ export function ApplyFixesDialog({
             <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Unapplied Fixes</h3>
             <p className="text-sm text-muted-foreground max-w-md">
-              There are no unapplied fixes for this dataset version.
-              Create fixes for issues first, then return here to apply them.
+              There are no unapplied fixes for this dataset version. Create
+              fixes for issues first, then return here to apply them.
             </p>
           </div>
         ) : (
@@ -233,7 +250,8 @@ export function ApplyFixesDialog({
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">
-                  {selectedFixIds.size} of {unappliedFixes.length} fixes selected
+                  {selectedFixIds.size} of {unappliedFixes.length} fixes
+                  selected
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -261,16 +279,19 @@ export function ApplyFixesDialog({
             {/* Fixes list */}
             <ScrollArea className="h-[300px] pr-4">
               <div className="space-y-4">
-                {renderFixGroup("Critical", groupedFixes.critical, "red")}
-                {renderFixGroup("High", groupedFixes.high, "orange")}
-                {renderFixGroup("Medium", groupedFixes.medium, "yellow")}
-                {renderFixGroup("Low", groupedFixes.low, "gray")}
+                {renderFixGroup("Critical", groupedFixes.critical)}
+                {renderFixGroup("High", groupedFixes.high)}
+                {renderFixGroup("Medium", groupedFixes.medium)}
+                {renderFixGroup("Low", groupedFixes.low)}
               </div>
             </ScrollArea>
 
             {/* Version notes */}
             <div className="space-y-2">
-              <Label htmlFor="version-notes" className="flex items-center gap-2">
+              <Label
+                htmlFor="version-notes"
+                className="flex items-center gap-2"
+              >
                 <FileText className="h-4 w-4" />
                 Version Notes (Optional)
               </Label>
@@ -298,7 +319,8 @@ export function ApplyFixesDialog({
                   Re-run data quality rules after applying fixes
                 </label>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Automatically validate the new version against all active rules
+                  Automatically validate the new version against all active
+                  rules
                 </p>
               </div>
             </div>
@@ -307,9 +329,11 @@ export function ApplyFixesDialog({
             {selectedFixIds.size > 0 && (
               <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
                 <p className="text-sm text-blue-900">
-                  <strong>Preview:</strong> A new version (v{versionNumber + 1}) will be created with{" "}
-                  {selectedFixIds.size} fix{selectedFixIds.size !== 1 ? "es" : ""} applied.
-                  {reRunRules && " Data quality rules will be automatically re-run."}
+                  <strong>Preview:</strong> A new version (v{versionNumber + 1})
+                  will be created with {selectedFixIds.size} fix
+                  {selectedFixIds.size !== 1 ? "es" : ""} applied.
+                  {reRunRules &&
+                    " Data quality rules will be automatically re-run."}
                 </p>
               </div>
             )}
@@ -338,7 +362,8 @@ export function ApplyFixesDialog({
             ) : (
               <>
                 <Check className="h-4 w-4 mr-2" />
-                Apply {selectedFixIds.size} Fix{selectedFixIds.size !== 1 ? "es" : ""}
+                Apply {selectedFixIds.size} Fix
+                {selectedFixIds.size !== 1 ? "es" : ""}
               </>
             )}
           </Button>

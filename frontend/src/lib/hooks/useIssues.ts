@@ -110,14 +110,14 @@ export function useIssues(filters?: {
 
         const response = await apiClient.get<Issue[]>("/issues/", { params });
         return response.data || [];
-      } catch (error: unknown) {
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issues");
       }
     },
     enabled: isAuthenticated && hasToken,
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -134,14 +134,14 @@ export function useIssuesSummary(days: number = 30) {
           `/issues/statistics/summary?days=${days}`
         );
         return response.data;
-      } catch (error) {
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issues summary");
       }
     },
     enabled: isAuthenticated && hasToken,
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -154,15 +154,17 @@ export function useIssue(issueId: string) {
     queryKey: ["issue", issueId],
     queryFn: async () => {
       try {
-        const response = await apiClient.get<DetailedIssue>(`/issues/${issueId}/`);
+        const response = await apiClient.get<DetailedIssue>(
+          `/issues/${issueId}/`
+        );
         return response.data;
-      } catch (error) {
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issue details");
       }
     },
     enabled: isAuthenticated && hasToken && !!issueId,
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -194,9 +196,12 @@ export function useCreateFixMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ issueId, fixData }: {
+    mutationFn: ({
+      issueId,
+      fixData,
+    }: {
       issueId: string;
-      fixData: { new_value?: string; comment?: string }
+      fixData: { new_value?: string; comment?: string };
     }) => createFix(issueId, fixData),
     onSuccess: () => {
       // Invalidate and refetch issues queries
@@ -281,8 +286,8 @@ export function useUnappliedFixes(versionId: string) {
           `/processing/datasets/versions/${versionId}/unapplied-fixes`
         );
         return response.data || [];
-      } catch (error) {
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch unapplied fixes");
       }
     },
     enabled: isAuthenticated && hasToken && !!versionId,

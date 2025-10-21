@@ -20,6 +20,11 @@ from app.utils.parallel_executor import ParallelRuleExecutor, ExecutionMode
 from app.utils.logging_service import get_logger, ExecutionPhase
 from app.utils.memory_optimization import MemoryMonitor, OptimizedDataFrameOperations
 from app.services.rule_versioning import create_rule_snapshot, create_lightweight_rule_snapshot
+from app.validators.base_validator import BaseValidator
+from app.validators.statistical_validators import (
+    StatisticalOutlierValidator, DistributionCheckValidator, CorrelationValidator
+)
+from app.services.anomaly_detection import MLAnomalyValidator
 
 
 class EnhancedRuleEngineService(RuleEngineService):
