@@ -1,0 +1,73 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_hygiene
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ASYNC_DATABASE_URL: ${ASYNC_DATABASE_URL}
+    depends_on:
+      - migrations
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/app
+      - ./tests:/app/tests
+      - ./pytest.ini:/app/pytest.ini
+      - ./test_api.py:/app/test_api.py
+      - ./test_rules_api.py:/app/test_rules_api.py
+      - ./api/data:/app/data
+    working_dir: /app
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - internal
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml --no-autoupdate run
+    volumes:
+      - ./cloudflared-config.yml:/etc/cloudflared/config.yml:ro
+      - ./63090a6f-b69a-457f-ac79-279f7c5c8fae.json:/etc/cloudflared/63090a6f-b69a-457f-ac79-279f7c5c8fae.json:ro
+    depends_on:
+      - api
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -7,14 +7,15 @@ from app.database import get_session
 from app.models import User, UserRole
 from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse, UserRoleUpdate
 from app.auth import (
-    get_password_hash, 
-    verify_password, 
-    create_access_token, 
-    get_current_user, 
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    get_current_user,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
 
 @router.post("/register", response_model=UserResponse)
 async def register_user(
@@ -22,13 +23,14 @@ async def register_user(
     db: Session = Depends(get_session)
 ):
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = db.query(User).filter(
+        User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
+
     # Create new user
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
@@ -38,51 +40,67 @@ async def register_user(
         auth_provider="local",
         auth_subject=hashed_password
     )
-    
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    
+
     return new_user
+
 
 @router.post("/login", response_model=TokenResponse)
 async def login_user(
     credentials: UserLogin,
     db: Session = Depends(get_session)
 ):
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"🔑 Login attempt for email: {credentials.email}")
+    
     # Find user by email
     user = db.query(User).filter(User.email == credentials.email).first()
     if not user:
+        logger.warning(f"❌ User not found: {credentials.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
+
+    logger.info(f"✅ User found: {credentials.email}, verifying password...")
     
     # Verify password
     if not verify_password(credentials.password, user.auth_subject):
+        logger.warning(f"❌ Password verification failed for: {credentials.email}")
+        logger.debug(f"   Password length: {len(credentials.password)}, Hash: {user.auth_subject[:30]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
+
+    logger.info(f"✅ Password verified for: {credentials.email}")
     
     # Create access token (indefinite for demo if ACCESS_TOKEN_EXPIRE_MINUTES is None)
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES) if ACCESS_TOKEN_EXPIRE_MINUTES else None
+    access_token_expires = timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES) if ACCESS_TOKEN_EXPIRE_MINUTES else None
     access_token = create_access_token(
         data={"sub": user.id, "email": user.email, "role": user.role.value},
         expires_delta=access_token_expires
     )
-    
+
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
         user=UserResponse.model_validate(user)
     )
 
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     return current_user
+
 
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
@@ -95,9 +113,10 @@ async def list_users(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admins can list users"
         )
-    
+
     users = db.query(User).all()
     return users
+
 
 @router.put("/users/{user_id}/role")
 async def update_user_role(
@@ -126,6 +145,7 @@ async def update_user_role(
 
     return {"message": "User role updated successfully", "user": UserResponse.model_validate(user)}
 
+
 @router.post("/setup-demo")
 async def setup_demo_account(
     db: Session = Depends(get_session)
@@ -135,7 +155,7 @@ async def setup_demo_account(
     This endpoint is idempotent.
     """
     demo_email = "admin@datahygiene.com"
-    
+
     # Check if demo user already exists
     existing_user = db.query(User).filter(User.email == demo_email).first()
     if existing_user:
@@ -166,6 +186,7 @@ async def setup_demo_account(
         "password": demo_password,
         "user": UserResponse.model_validate(demo_user)
     }
+
 
 @router.delete("/users/{user_id}")
 async def delete_user(

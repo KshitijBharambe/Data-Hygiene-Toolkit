@@ -1,0 +1,83 @@
+# ============================================================================
+# Docker Compose - Development Profile
+# Data Hygiene Toolkit
+# 
+# Usage: docker compose -f docker/compose/docker-compose.yml \
+#                       -f docker/compose/docker-compose.dev.yml up
+# Or use: make dev
+# 
+# Features:
+# - Hot reload for backend and frontend
+# - Source code mounted as volumes
+# - Development build targets
+# - Debug tools enabled
+# - All ports exposed
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # Backend - Development Overrides
+  # ==========================================================================
+  backend:
+    build:
+      target: development
+    environment:
+      DEBUG: "true"
+      API_RELOAD: "true"
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+    volumes:
+      # Mount source code for hot reload
+      - ../../api/app:/app/app
+      - ../../api/migrations:/app/migrations
+      - ../../api/data:/app/data
+      # Mount pyproject.toml for dependency updates
+      - ../../pyproject.toml:/app/pyproject.toml
+      - ../../uv.lock:/app/uv.lock
+    command: >
+      sh -c "
+      echo '🔥 Starting backend in development mode with hot reload...';
+      uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --log-level debug
+      "
+
+  # ==========================================================================
+  # Frontend - Development Overrides
+  # ==========================================================================
+  frontend:
+    build:
+      target: development
+    environment:
+      NODE_ENV: development
+    volumes:
+      # Mount source code for hot reload
+      - ../../frontend:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+      - /app/.next         # Prevent overwriting .next build cache
+    command: >
+      sh -c "
+      echo '🔥 Starting frontend in development mode with hot reload...';
+      npm run dev
+      "
+
+  # ==========================================================================
+  # PostgreSQL - Development Overrides
+  # ==========================================================================
+  postgres:
+    ports:
+      - "5432:5432"  # Expose for external connections (e.g., DBeaver, psql)
+
+  # ==========================================================================
+  # MinIO - Development Overrides  
+  # ==========================================================================
+  minio:
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+
+# ============================================================================
+# Networks - Development Configuration
+# ============================================================================
+networks:
+  backend-network:
+    # NOT internal in dev mode (allows external access for debugging)
+    internal: false

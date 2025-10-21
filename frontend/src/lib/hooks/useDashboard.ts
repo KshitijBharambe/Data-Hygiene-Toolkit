@@ -1,28 +1,28 @@
-'use client'
+"use client";
 
-import { useQuery } from '@tanstack/react-query'
-import apiClient from '@/lib/api'
-import { DashboardOverview } from '@/types/api'
-import { useAuthenticatedApi } from './useAuthenticatedApi'
+import { useQuery } from "@tanstack/react-query";
+import apiClient from "@/lib/api";
+import { DashboardOverview } from "@/types/api";
+import { useAuthenticatedApi } from "./useAuthenticatedApi";
 
 export function useDashboardOverview() {
-  const { isAuthenticated, hasToken } = useAuthenticatedApi()
+  const { isAuthenticated, hasToken } = useAuthenticatedApi();
 
   return useQuery<DashboardOverview>({
-    queryKey: ['dashboard-overview'],
+    queryKey: ["dashboard-overview"],
     queryFn: async () => {
       try {
-        const result = await apiClient.getDashboardOverview()
-        return result
-      } catch (error) {
-        throw error
+        const result = await apiClient.getDashboardOverview();
+        return result;
+      } catch {
+        throw new Error("Failed to fetch dashboard overview");
       }
     },
     enabled: isAuthenticated && hasToken,
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
-      return failureCount < 3
-    }
-  })
+    retry: (failureCount) => {
+      return failureCount < 3;
+    },
+  });
 }

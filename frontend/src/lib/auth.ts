@@ -29,7 +29,6 @@ export default NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          console.log("Missing credentials");
           return null;
         }
 
@@ -40,12 +39,7 @@ export default NextAuth({
             password: credentials.password as string,
           };
 
-          console.log("Attempting login with:", { email: loginData.email });
           const response = await apiClient.login(loginData);
-          console.log("Login response received:", {
-            hasToken: !!response.access_token,
-            hasUser: !!response.user,
-          });
 
           if (response.access_token && response.user) {
             // Store the token in the API client
@@ -60,28 +54,8 @@ export default NextAuth({
             };
           }
 
-          console.log("Login failed: Invalid response format");
           return null;
-        } catch (error: unknown) {
-          console.error("Authentication error:", error);
-          // If it's an axios error, log more details
-          if (error && typeof error === "object" && "response" in error) {
-            const axiosError = error as {
-              response?: { status?: number; data?: unknown };
-              message?: string;
-            };
-            console.error("API response status:", axiosError.response?.status);
-            console.error("API response data:", axiosError.response?.data);
-
-            // Handle specific error cases
-            if (axiosError.response?.status === 502) {
-              console.error(
-                "502 Bad Gateway: Backend API server is unreachable"
-              );
-            }
-          } else if (error && typeof error === "object" && "message" in error) {
-            console.error("Network error:", (error as Error).message);
-          }
+        } catch {
           return null;
         }
       },
@@ -118,8 +92,8 @@ export default NextAuth({
           try {
             const apiClient = await getApiClient();
             apiClient.setToken(token.accessToken as string);
-          } catch (error) {
-            console.warn("Failed to set token in API client:", error);
+          } catch {
+            // Silently fail - token will be set on next API call
           }
         }
       }

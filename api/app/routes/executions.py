@@ -12,9 +12,11 @@ from app.models import (
 )
 from app.auth import get_any_authenticated_user, get_admin_user
 from app.schemas import (
-    ExecutionResponse, ExecutionCreate, IssueResponse
+    ExecutionResponse, ExecutionCreate, IssueResponse, QualityMetricsResponse
 )
 from app.services.rule_engine import RuleEngineService
+from app.services.enhanced_rule_engine import EnhancedRuleEngineService
+from app.services.data_quality import DataQualityService
 
 router = APIRouter(prefix="/executions", tags=["Rule Executions"])
 
@@ -153,7 +155,12 @@ async def create_execution(
     # Check if dataset is accessible by user (you might want to add access control)
 
     try:
-        rule_service = RuleEngineService(db)
+        # Use enhanced rule engine with parallel execution and comprehensive logging
+        rule_service = EnhancedRuleEngineService(
+            db,
+            enable_parallel=True,
+            max_workers=4  # Configurable based on system resources
+        )
         execution = rule_service.execute_rules_on_dataset(
             dataset_version=dataset_version,
             rule_ids=execution_data.rule_ids,
@@ -308,6 +315,7 @@ async def get_execution_summary(
         "rule_performance": [
             {
                 "rule_id": er.rule_id,
+                "rule_snapshot": er.rule_snapshot,
                 "error_count": er.error_count,
                 "rows_flagged": er.rows_flagged,
                 "cols_flagged": er.cols_flagged,
@@ -408,3 +416,23 @@ async def get_execution_rules(
         result.append(rule_info)
 
     return result
+
+
+@router.get("/{execution_id}/quality-metrics", response_model=QualityMetricsResponse)
+async def get_execution_quality_metrics(
+    execution_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get or compute comprehensive data quality metrics for an execution.
+
+    Returns three key metrics:
+    - DQI (Data Quality Index): Weighted constraint satisfaction score (0-100)
+    - CleanRowsPct: Percentage of rows without any issues (0-100)
+    - Hybrid: Harmonic mean of DQI and CleanRowsPct (0-100)
+
+    Metrics are cached after first computation.
+    """
+    quality_service = DataQualityService(db)
+    return quality_service.compute_quality_metrics(execution_id)

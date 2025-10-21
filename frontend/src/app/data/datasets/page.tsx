@@ -47,6 +47,7 @@ import {
 } from 'lucide-react'
 import { Dataset } from '@/types/api'
 import apiClient from '@/lib/api'
+import { formatDateTime } from '@/lib/utils/date'
 
 export default function DatasetsPage() {
   const [datasets, setDatasets] = useState<Dataset[]>([])
@@ -106,16 +107,6 @@ export default function DatasetsPage() {
     } finally {
       setIsDeleting(false)
     }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
   }
 
   const getStatusColor = (status: string) => {
@@ -263,7 +254,7 @@ export default function DatasetsPage() {
                       <TableCell>
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
                           <Calendar className="h-3 w-3" />
-                          {formatDate(dataset.uploaded_at)}
+                          {formatDateTime(dataset.uploaded_at, 'MMM d, yyyy h:mm a')}
                         </div>
                       </TableCell>
                       <TableCell>

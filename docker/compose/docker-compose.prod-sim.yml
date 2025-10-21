@@ -1,0 +1,179 @@
+# ============================================================================
+# Docker Compose - Production Simulation Profile
+# Data Hygiene Toolkit
+# 
+# Usage: docker compose -f docker/compose/docker-compose.yml \
+#                       -f docker/compose/docker-compose.prod-sim.yml up --build
+# Or use: make prod-sim
+# 
+# Features:
+# - Production build targets
+# - NO source code volumes (tests built images)
+# - Production-like resource limits
+# - Internal backend network (simulates private subnet)
+# - Production logging format
+# - Production environment variables
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # Backend - Production Simulation Overrides
+  # ==========================================================================
+  backend:
+    build:
+      target: production
+    environment:
+      DEBUG: "false"
+      API_RELOAD: "false"
+      ENVIRONMENT: production
+      LOG_LEVEL: info
+      PYTHONOPTIMIZE: 2
+      
+      # Connection pooling (production settings)
+      DB_POOL_SIZE: 3
+      DB_MAX_OVERFLOW: 5
+      DB_POOL_TIMEOUT: 30
+      DB_POOL_RECYCLE: 1800
+      DB_POOL_PRE_PING: "true"
+    
+    # NO volumes - test built image
+    volumes: []
+    
+    # Production-like resource limits (simulate Cloud Run)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Production command (gunicorn with multiple workers)
+    command: >
+      gunicorn app.main:app
+      --workers 4
+      --worker-class uvicorn.workers.UvicornWorker
+      --bind 0.0.0.0:8000
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+      --timeout 120
+      --graceful-timeout 30
+
+  # ==========================================================================
+  # Frontend - Production Simulation Overrides
+  # ==========================================================================
+  frontend:
+    build:
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=512"
+    
+    # NO volumes - test built image
+    volumes: []
+    
+    # Production-like resource limits (simulate Vercel)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Production command (Next.js standalone server)
+    command: ["node", "server.js"]
+
+  # ==========================================================================
+  # PostgreSQL - Production Simulation Overrides
+  # ==========================================================================
+  postgres:
+    # Don't expose ports in prod-sim (only internal access)
+    ports: []
+    
+    # Production-like settings
+    command: >
+      postgres
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=2621kB
+      -c min_wal_size=1GB
+      -c max_wal_size=4GB
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==========================================================================
+  # MinIO - Production Simulation Overrides
+  # ==========================================================================
+  minio:
+    # Don't expose console in prod-sim
+    ports:
+      - "9000:9000"  # API only (needed for backend access)
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # MinIO Init - Skip in prod-sim (buckets already exist)
+  # ==========================================================================
+  minio-init:
+    profiles:
+      - donotstart  # Don't run in prod-sim
+
+# ============================================================================
+# Networks - Production Simulation Configuration
+# ============================================================================
+networks:
+  backend-network:
+    # Internal network (simulate AWS private subnet)
+    internal: true
+    
+  frontend-network:
+    # Public-facing network
+    internal: false
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+x-logging: &production-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+    labels: "service,environment"
+
+services:
+  backend:
+    logging: *production-logging
+  frontend:
+    logging: *production-logging
+  postgres:
+    logging: *production-logging
+  minio:
+    logging: *production-logging

@@ -51,7 +51,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/utils/date";
 
 const updateRuleSchema = z.object({
   name: z
@@ -186,20 +186,14 @@ export default function RuleDetailPage({
       if (data.params && data.params.trim()) {
         try {
           const parsedParams = JSON.parse(data.params);
-          console.log('✅ Parsed params:', parsedParams, 'Type:', typeof parsedParams);
           payload.params = parsedParams;
-        } catch (e) {
-          console.error('❌ Failed to parse params:', data.params, e);
+        } catch {
           form.setError("params", {
             message: "Invalid JSON format in parameters",
           });
           return;
         }
-      } else {
-        console.log('ℹ️ No params provided, omitting from payload');
       }
-
-      console.log('📤 Sending update payload:', JSON.stringify(payload, null, 2));
 
       await updateRule.mutateAsync({
         id: rule.id,
@@ -208,15 +202,8 @@ export default function RuleDetailPage({
 
       setIsEditing(false);
     } catch (error: unknown) {
-      console.error("Failed to update rule:", error);
-      
       // Log detailed error information
       const axiosError = error as { response?: { data?: { detail?: unknown }; status?: number; headers?: unknown } };
-      if (axiosError.response) {
-        console.error("Error response:", axiosError.response.data);
-        console.error("Error status:", axiosError.response.status);
-        console.error("Error headers:", axiosError.response.headers);
-      }
       
       // Show user-friendly error message
       if (axiosError.response?.status === 422) {
@@ -577,13 +564,13 @@ export default function RuleDetailPage({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Created</span>
                   <span className="text-sm">
-                    {format(new Date(rule.created_at), "MMM d, yyyy")}
+                    {formatDate(rule.created_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Updated</span>
                   <span className="text-sm">
-                    {format(new Date(rule.updated_at), "MMM d, yyyy")}
+                    {formatDate(rule.updated_at)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

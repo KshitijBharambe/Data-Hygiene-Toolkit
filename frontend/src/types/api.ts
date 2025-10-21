@@ -103,6 +103,11 @@ export interface Rule {
   created_by: string;
   created_at: string;
   updated_at: string;
+  version?: number;
+  parent_rule_id?: string;
+  rule_family_id?: string;
+  is_latest?: boolean;
+  change_log?: string | null;
 }
 
 export interface RuleCreate {
@@ -298,7 +303,9 @@ export interface DashboardOverview {
     total_executions: number;
     total_issues: number;
     total_fixes: number;
-    avg_quality_score: number;
+    avg_dqi: number;
+    avg_clean_rows_pct: number;
+    avg_hybrid: number;
     issues_fixed_rate: number;
   };
   recent_activity: {
@@ -325,4 +332,18 @@ export interface DashboardOverview {
       poor: number;
     };
   };
+}
+
+// Quality Metrics types
+export type QualityMetricsStatus = "ok" | "not_available";
+
+export interface QualityMetrics {
+  execution_id: string;
+  dataset_version_id: string;
+  dqi: number;
+  clean_rows_pct: number;
+  hybrid: number;
+  status: QualityMetricsStatus;
+  message: string | null;
+  computed_at: string;
 }

@@ -9,10 +9,13 @@ from app.models import (
 )
 from app.auth import get_any_authenticated_user, get_admin_user
 from app.schemas import (
-    DatasetResponse, FixCreate, FixResponse, IssueResponse
+    DatasetResponse, FixCreate, FixResponse, IssueResponse,
+    ApplyFixesRequest, ApplyFixesResponse, UnappliedFixResponse,
+    VersionLineageResponse, AppliedFixResponse, DatasetVersionResponse
 )
 from app.services.data_quality import DataQualityService
 from app.services.data_import import DataImportService
+from app.services.dataset_fixes import DatasetFixService
 
 router = APIRouter(prefix="/processing", tags=["Data Processing"])
 
@@ -20,9 +23,12 @@ router = APIRouter(prefix="/processing", tags=["Data Processing"])
 @router.post("/datasets/{dataset_id}/validate")
 async def validate_dataset(
     dataset_id: str,
-    missing_data_strategy: Optional[str] = Query("smart", description="Missing data handling strategy"),
-    standardization_rules: Optional[Dict[str, str]] = Body(None, description="Column standardization rules"),
-    validation_rules: Optional[Dict[str, Dict[str, Any]]] = Body(None, description="Value validation rules"),
+    missing_data_strategy: Optional[str] = Query(
+        "smart", description="Missing data handling strategy"),
+    standardization_rules: Optional[Dict[str, str]] = Body(
+        None, description="Column standardization rules"),
+    validation_rules: Optional[Dict[str, Dict[str, Any]]] = Body(
+        None, description="Value validation rules"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -48,7 +54,7 @@ async def validate_dataset(
 
     # Check permissions (user must be uploader, admin, or analyst)
     if (current_user.role.value not in ["admin", "analyst"] and
-        dataset.uploaded_by != current_user.id):
+            dataset.uploaded_by != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to process this dataset"
@@ -73,7 +79,8 @@ async def validate_dataset(
             )
 
         # Load the dataset
-        df = data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        df = data_import_service.load_dataset_file(
+            dataset_id, latest_version.version_number)
         original_df = df.copy()
 
         processing_report = {
@@ -302,7 +309,8 @@ async def get_issue_fixes(
 @router.post("/datasets/{dataset_id}/apply-corrections")
 async def apply_corrections(
     dataset_id: str,
-    corrections: List[Dict[str, Any]] = Body(..., description="List of corrections to apply"),
+    corrections: List[Dict[str, Any]
+                      ] = Body(..., description="List of corrections to apply"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -326,7 +334,7 @@ async def apply_corrections(
         )
 
     if (current_user.role.value not in ["admin", "analyst"] and
-        dataset.uploaded_by != current_user.id):
+            dataset.uploaded_by != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to modify this dataset"
@@ -462,7 +470,8 @@ async def get_processing_history(
 @router.post("/datasets/{dataset_id}/bulk-corrections")
 async def apply_bulk_corrections(
     dataset_id: str,
-    correction_rules: Dict[str, Dict[str, Any]] = Body(..., description="Bulk correction rules by column"),
+    correction_rules: Dict[str, Dict[str, Any]
+                           ] = Body(..., description="Bulk correction rules by column"),
     db: Session = Depends(get_session),
     current_user: User = Depends(get_any_authenticated_user)
 ):
@@ -487,7 +496,7 @@ async def apply_bulk_corrections(
         )
 
     if (current_user.role.value not in ["admin", "analyst"] and
-        dataset.uploaded_by != current_user.id):
+            dataset.uploaded_by != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions to modify this dataset"
@@ -506,7 +515,8 @@ async def apply_bulk_corrections(
         )
 
         # Load dataset
-        df = data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        df = data_import_service.load_dataset_file(
+            dataset_id, latest_version.version_number)
         original_df = df.copy()
 
         bulk_report = {
@@ -591,4 +601,213 @@ async def apply_bulk_corrections(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Bulk corrections failed: {str(e)}"
+        )
+
+
+@router.post("/datasets/{dataset_id}/versions/apply-fixes", response_model=ApplyFixesResponse)
+async def apply_fixes_to_create_version(
+    dataset_id: str,
+    request: ApplyFixesRequest,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Apply selected fixes to a dataset version and create a new version
+
+    This endpoint allows you to:
+    1. Select specific fixes to apply
+    2. Create a new dataset version with those fixes applied
+    3. Track which fixes were applied to which version
+    4. Maintain version lineage and audit trail
+
+    Args:
+        dataset_id: ID of the dataset
+        request: ApplyFixesRequest containing:
+            - source_version_id: Version to apply fixes to
+            - fix_ids: List of fix IDs to apply
+            - version_notes: Optional notes for the new version
+            - re_run_rules: Whether to automatically re-run rules on new version
+
+    Returns:
+        ApplyFixesResponse with new version details and count of fixes applied
+    """
+    # Check if dataset exists
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
+    # Check permissions (user must be uploader, admin, or analyst)
+    if (current_user.role.value not in ["admin", "analyst"] and
+            dataset.uploaded_by != current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions to modify this dataset"
+        )
+
+    # Validate that we have fixes to apply
+    if not request.fix_ids or len(request.fix_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fix IDs provided"
+        )
+
+    try:
+        fix_service = DatasetFixService(db)
+
+        # Apply fixes and create new version
+        new_version, applied_fixes = fix_service.apply_fixes_and_create_version(
+            dataset_id=dataset_id,
+            source_version_id=request.source_version_id,
+            fix_ids=request.fix_ids,
+            user_id=current_user.id,
+            version_notes=request.version_notes,
+            re_run_rules=request.re_run_rules
+        )
+
+        # Update dataset status
+        dataset.status = DatasetStatus.cleaned
+        db.commit()
+
+        return ApplyFixesResponse(
+            new_version=DatasetVersionResponse.model_validate(new_version),
+            fixes_applied=len(applied_fixes),
+            message=f"Successfully created version {new_version.version_no} with {len(applied_fixes)} fixes applied"
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply fixes: {str(e)}"
+        )
+
+
+@router.get("/datasets/versions/{version_id}/unapplied-fixes", response_model=List[UnappliedFixResponse])
+async def get_unapplied_fixes_for_version(
+    version_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get all unapplied fixes for issues detected in a specific dataset version
+
+    Returns fixes that have been proposed but not yet applied to create a new version.
+    These are candidates for the next version creation.
+
+    Args:
+        version_id: Dataset version ID
+
+    Returns:
+        List of unapplied fixes with their details
+    """
+    # Check if version exists
+    version = db.query(DatasetVersion).filter(
+        DatasetVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset version not found"
+        )
+
+    try:
+        fix_service = DatasetFixService(db)
+        unapplied_fixes = fix_service.get_unapplied_fixes_for_version(
+            version_id)
+        return [UnappliedFixResponse(**fix) for fix in unapplied_fixes]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve unapplied fixes: {str(e)}"
+        )
+
+
+@router.get("/datasets/versions/{version_id}/lineage", response_model=List[VersionLineageResponse])
+async def get_version_lineage(
+    version_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get the version lineage (parent chain) for a dataset version
+
+    Returns the full history from the current version back to the original upload,
+    showing how the dataset evolved through various transformations and fix applications.
+
+    Args:
+        version_id: Dataset version ID
+
+    Returns:
+        List of versions in the lineage chain, from current to original
+    """
+    # Check if version exists
+    version = db.query(DatasetVersion).filter(
+        DatasetVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset version not found"
+        )
+
+    try:
+        fix_service = DatasetFixService(db)
+        lineage = fix_service.get_version_lineage(version_id)
+        return [VersionLineageResponse(**v) for v in lineage]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve version lineage: {str(e)}"
+        )
+
+
+@router.get("/datasets/versions/{version_id}/applied-fixes", response_model=List[AppliedFixResponse])
+async def get_fixes_applied_in_version(
+    version_id: str,
+    db: Session = Depends(get_session),
+    current_user: User = Depends(get_any_authenticated_user)
+):
+    """
+    Get all fixes that were applied to create a specific dataset version
+
+    Shows exactly which fixes were applied when this version was created,
+    including the old and new values for each fix.
+
+    Args:
+        version_id: Dataset version ID
+
+    Returns:
+        List of fixes that were applied in this version
+    """
+    # Check if version exists
+    version = db.query(DatasetVersion).filter(
+        DatasetVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset version not found"
+        )
+
+    try:
+        fix_service = DatasetFixService(db)
+        applied_fixes = fix_service.get_fixes_applied_in_version(version_id)
+        return [AppliedFixResponse(**fix) for fix in applied_fixes]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve applied fixes: {str(e)}"
         )

@@ -31,11 +31,12 @@ import {
   Trash2,
   Shield,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  History
 } from 'lucide-react'
 import Link from 'next/link'
 import { Rule, RuleKind, Criticality } from '@/types/api'
-import { format } from 'date-fns'
+import { formatDate } from '@/lib/utils/date'
 
 const criticalityColors: Record<Criticality, string> = {
   low: 'bg-blue-100 text-blue-800',
@@ -86,6 +87,12 @@ function RuleActionsDropdown({ rule }: { rule: Rule }) {
           <Link href={`/rules/${rule.id}`}>
             <Edit className="h-4 w-4 mr-2" />
             Edit
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={`/rules/${rule.id}/versions`}>
+            <History className="h-4 w-4 mr-2" />
+            View Versions
           </Link>
         </DropdownMenuItem>
         {rule.is_active ? (
@@ -253,6 +260,7 @@ export default function RulesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Version</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Criticality</TableHead>
                     <TableHead>Status</TableHead>
@@ -274,6 +282,11 @@ export default function RulesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <Badge variant="outline" className="font-mono">
+                          v{rule.version || 1}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant="outline">
                           {ruleKindLabels[rule.kind] || rule.kind}
                         </Badge>
@@ -289,7 +302,7 @@ export default function RulesPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(rule.created_at), 'MMM d, yyyy')}
+                        {formatDate(rule.created_at, 'MMM d, yyyy')}
                       </TableCell>
                       <TableCell className="text-right">
                         <RuleActionsDropdown rule={rule} />

@@ -25,6 +25,7 @@ import {
   ExportCreate,
   Fix,
   FixCreate,
+  QualityMetrics,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
@@ -34,11 +35,11 @@ class ApiClient {
 
   constructor(baseURL: string = getApiUrl()) {
     // Ensure HTTPS in production
-    const secureURL = baseURL.startsWith('http://') && baseURL.includes('fly.dev')
-      ? baseURL.replace('http://', 'https://')
-      : baseURL;
+    const secureURL =
+      baseURL.startsWith("http://") && baseURL.includes("fly.dev")
+        ? baseURL.replace("http://", "https://")
+        : baseURL;
 
-    console.log('🔧 ApiClient created with baseURL:', secureURL, 'NODE_ENV:', process.env.NODE_ENV);
     this.client = axios.create({
       baseURL: secureURL,
       headers: {
@@ -53,10 +54,6 @@ class ApiClient {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
 
-        // Debug: Log the actual URL being requested
-        const fullUrl = config.baseURL ? `${config.baseURL}${config.url}` : config.url;
-        console.log('🌐 Axios request:', fullUrl);
-
         return config;
       },
       (error) => Promise.reject(error)
@@ -66,12 +63,8 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          this.token = null;
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("auth_token");
-          }
-        }
+        // Don't automatically clear token on 401 - let NextAuth handle session management
+        // The token will be re-synced by useAuthenticatedApi hook
         return Promise.reject(error);
       }
     );
@@ -80,8 +73,7 @@ class ApiClient {
     if (typeof window !== "undefined") {
       try {
         this.token = localStorage.getItem("auth_token");
-      } catch (error) {
-        console.warn("Failed to load token from localStorage:", error);
+      } catch {
         this.token = null;
       }
     }
@@ -260,7 +252,6 @@ class ApiClient {
   }
 
   async updateRule(id: string, rule: RuleUpdate): Promise<Rule> {
-    console.log('🔧 API Client updateRule called with:', { id, rule });
     const response = await this.client.put<Rule>(`/rules/${id}`, rule);
     return response.data;
   }
@@ -290,6 +281,11 @@ class ApiClient {
 
   async deactivateRule(id: string): Promise<void> {
     await this.client.patch(`/rules/${id}/deactivate`);
+  }
+
+  async getRuleVersions(id: string): Promise<Rule[]> {
+    const response = await this.client.get<Rule[]>(`/rules/${id}/versions`);
+    return response.data;
   }
 
   // Execution endpoints
@@ -326,20 +322,38 @@ class ApiClient {
     return response.data;
   }
 
+  async getExecutionQualityMetrics(
+    executionId: string
+  ): Promise<QualityMetrics> {
+    const response = await this.client.get<QualityMetrics>(
+      `/executions/${executionId}/quality-metrics`
+    );
+    return response.data;
+  }
+
   // Issue endpoints
   async getIssues(
     executionId?: string,
     page: number = 1,
-    size: number = 20
+    size: number = 1000
   ): Promise<PaginatedResponse<Issue>> {
-    const params: Record<string, unknown> = { page, size };
+    const params: Record<string, unknown> = {
+      limit: size,
+      offset: (page - 1) * size,
+    };
     if (executionId) params.execution_id = executionId;
 
-    const response = await this.client.get<PaginatedResponse<Issue>>(
-      "/issues",
-      { params }
-    );
-    return response.data;
+    const response = await this.client.get<Issue[]>("/issues", { params });
+
+    // Convert array response to paginated format
+    const issues = Array.isArray(response.data) ? response.data : [];
+    return {
+      items: issues,
+      total: issues.length,
+      page: page,
+      size: size,
+      pages: 1,
+    };
   }
 
   async getIssue(id: string): Promise<Issue> {
@@ -418,6 +432,126 @@ class ApiClient {
     return response.data;
   }
 
+  // Quality Reports endpoints
+  async getQualitySummary(datasetId: string): Promise<unknown> {
+    const response = await this.client.get(
+      `/reports/datasets/${datasetId}/quality-summary`
+    );
+    return response.data;
+  }
+
+  async generateQualityReport(
+    datasetId: string,
+    includeCharts: boolean = false
+  ): Promise<{
+    export_id: string;
+    dataset_id: string;
+    dataset_name: string;
+    report_type: string;
+    file_path: string;
+    download_url: string;
+    include_charts: boolean;
+  }> {
+    const response = await this.client.post(
+      `/reports/datasets/${datasetId}/quality-report`,
+      null,
+      {
+        params: { include_charts: includeCharts },
+      }
+    );
+    return response.data;
+  }
+
+  async getQualityTrends(days: number = 30): Promise<unknown> {
+    const response = await this.client.get(
+      "/reports/analytics/quality-trends",
+      {
+        params: { days },
+      }
+    );
+    return response.data;
+  }
+
+  async getIssuePatterns(): Promise<unknown> {
+    const response = await this.client.get("/reports/analytics/issue-patterns");
+    return response.data;
+  }
+
+  async getAllDatasetsQualityScores(): Promise<{
+    datasets: Array<{
+      id: string;
+      name: string;
+      quality_score: number;
+      total_rows: number;
+      total_issues: number;
+      total_fixes: number;
+      status: string;
+    }>;
+    total_datasets: number;
+  }> {
+    const response = await this.client.get("/reports/datasets/quality-scores");
+    return response.data;
+  }
+
+  // Export Data endpoints
+  async exportDataset(
+    datasetId: string,
+    format: string,
+    includeMetadata: boolean = true,
+    includeIssues: boolean = false,
+    executionId?: string
+  ): Promise<{
+    export_id: string;
+    dataset_id: string;
+    dataset_name: string;
+    version_number: number;
+    export_format: string;
+    file_path: string;
+    include_metadata: boolean;
+    include_issues: boolean;
+    download_url: string;
+  }> {
+    const response = await this.client.post(
+      `/reports/datasets/${datasetId}/export`,
+      null,
+      {
+        params: {
+          export_format: format,
+          include_metadata: includeMetadata,
+          include_issues: includeIssues,
+          execution_id: executionId,
+        },
+      }
+    );
+    return response.data;
+  }
+
+  async getExportHistory(datasetId: string): Promise<{
+    dataset_id: string;
+    dataset_name: string;
+    total_exports: number;
+    exports: unknown[];
+  }> {
+    const response = await this.client.get(
+      `/reports/datasets/${datasetId}/export-history`
+    );
+    return response.data;
+  }
+
+  async downloadExportFile(exportId: string): Promise<Blob> {
+    const response = await this.client.get(
+      `/reports/exports/${exportId}/download`,
+      {
+        responseType: "blob",
+      }
+    );
+    return response.data;
+  }
+
+  async deleteExport(exportId: string): Promise<void> {
+    await this.client.delete(`/reports/exports/${exportId}`);
+  }
+
   // User management endpoints (admin only)
   async getUsers(): Promise<User[]> {
     const response = await this.client.get<User[]>("/auth/users");
@@ -493,7 +627,6 @@ function getInstance(): ApiClient {
 
   // Recreate instance if URL changed or doesn't exist
   if (!instance || lastUrl !== currentUrl) {
-    console.log('🔄 Creating new ApiClient instance with URL:', currentUrl);
     instance = new ApiClient(currentUrl);
     lastUrl = currentUrl;
   }
@@ -506,8 +639,8 @@ const apiClient = new Proxy({} as ApiClient, {
   get(_target, prop: string) {
     const inst = getInstance();
     const value = inst[prop as keyof ApiClient];
-    return typeof value === 'function' ? value.bind(inst) : value;
-  }
+    return typeof value === "function" ? value.bind(inst) : value;
+  },
 });
 
 export default apiClient;
