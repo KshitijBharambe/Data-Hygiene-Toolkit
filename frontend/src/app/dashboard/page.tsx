@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { MainLayout } from '@/components/layout/main-layout'
 import { StatsCards } from '@/components/dashboard/stats-cards'
 import { QualityOverview } from '@/components/dashboard/quality-overview'
+import { QualityMetricsOverview } from '@/components/dashboard/quality-metrics-overview'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
 import { Loader2 } from 'lucide-react'
 // import { QuickActions } from '@/components/dashboard/quick-actions'
@@ -56,6 +57,7 @@ export default function DashboardPage() {
         {/* Main Content */}
         <div className="space-y-6">
           <QualityOverview />
+          <QualityMetricsOverview />
           <RecentActivity />
         </div>
       </div>

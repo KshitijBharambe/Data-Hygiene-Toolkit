@@ -120,7 +120,9 @@ export function QualityOverview() {
   }
 
   // Use dashboard data if available, fallback to issues summary
-  const overallScore = dashboardData?.overview.avg_quality_score || 0;
+  const avgDQI = dashboardData?.overview.avg_dqi || 0;
+  const avgCleanRowsPct = dashboardData?.overview.avg_clean_rows_pct || 0;
+  const avgHybrid = dashboardData?.overview.avg_hybrid || 0;
   const qualityDistribution =
     dashboardData?.statistics.quality_score_distribution;
 
@@ -131,14 +133,31 @@ export function QualityOverview() {
       ? dashboardData.overview.total_issues - dashboardData.overview.total_fixes
       : 0);
 
-  // Create quality metrics based on real data
+  // Create quality metrics based on real data (now using DQI, CleanRowsPct, Hybrid)
   const qualityMetrics = [
     {
-      name: "Overall Quality",
-      score: Math.round(overallScore),
+      name: "DQI (Data Quality Index)",
+      score: Math.round(avgDQI),
       status:
-        overallScore >= 90 ? "good" : overallScore >= 75 ? "warning" : "poor",
+        avgDQI >= 90 ? "good" : avgDQI >= 75 ? "warning" : "poor",
       issues: activeIssuesCount,
+      description: "Weighted constraint satisfaction"
+    },
+    {
+      name: "Clean Rows %",
+      score: Math.round(avgCleanRowsPct),
+      status:
+        avgCleanRowsPct >= 90 ? "good" : avgCleanRowsPct >= 75 ? "warning" : "poor",
+      issues: activeIssuesCount,
+      description: "Rows without any issues"
+    },
+    {
+      name: "Hybrid Score",
+      score: Math.round(avgHybrid),
+      status:
+        avgHybrid >= 90 ? "good" : avgHybrid >= 75 ? "warning" : "poor",
+      issues: activeIssuesCount,
+      description: "Harmonic mean of DQI and Clean Rows"
     },
   ];
 
@@ -237,12 +256,12 @@ export function QualityOverview() {
         </CardHeader>
         <CardContent className="space-y-6 flex flex-col justify-between min-h-[280px]">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Overall Score</span>
+            <span className="text-sm font-medium">Overall Hybrid Score</span>
             <Badge
-              variant={getScoreVariant(overallScore)}
+              variant={getScoreVariant(avgHybrid)}
               className="text-lg px-3 py-1"
             >
-              {Math.round(overallScore)}%
+              {Math.round(avgHybrid)}%
             </Badge>
           </div>
 
@@ -250,14 +269,14 @@ export function QualityOverview() {
             {qualityMetrics.map((metric) => (
               <div key={metric.name} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{metric.name}</span>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{metric.name}</span>
+                    <span className="text-xs text-muted-foreground">{metric.description}</span>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <span className={getScoreColor(metric.score)}>
                       {metric.score}%
                     </span>
-                    <Badge variant="outline" className="text-xs">
-                      {metric.issues} open issues
-                    </Badge>
                   </div>
                 </div>
                 <Progress value={metric.score} className="h-2" />

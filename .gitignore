@@ -49,3 +49,9 @@ tests/
 # Gemini
 .gemini-clipboard
 
+.claude
+
+.serena
+
+docs
+

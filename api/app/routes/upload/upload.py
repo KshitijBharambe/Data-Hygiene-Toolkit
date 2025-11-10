@@ -2,14 +2,67 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, s
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional, cast
 import json
+import re
+import mimetypes
 
 from app.database import get_session
 from app.models import User, Dataset, DatasetColumn
 from app.auth import get_any_authenticated_user
 from app.schemas import DatasetResponse, DataProfileResponse, DatasetColumnResponse
 from app.services.data_import import DataImportService
+from app.utils import sanitize_input, validate_identifier
 
 router = APIRouter(prefix="/data", tags=["Data Import"])
+
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".txt"}
+ALLOWED_MIME_TYPES = {
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain"
+}
+
+def is_allowed_file(filename: str, content_type: str) -> bool:
+    """
+    Check if the file is allowed based on its extension and MIME type.
+    """
+    # Check file extension
+    ext = "." + filename.split('.')[-1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return False
+
+    # Check MIME type
+    if content_type not in ALLOWED_MIME_TYPES:
+        return False
+
+    # Check for double extensions
+    if len(filename.split('.')) > 2:
+        return False
+
+    return True
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize the filename to prevent security risks.
+    """
+    # Remove potentially malicious characters
+    sanitized_filename = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
+
+    # Prevent path traversal
+    sanitized_filename = sanitized_filename.replace("../", "")
+
+    return sanitized_filename
+
+
+def _sanitize_identifier(value: str, field_name: str) -> str:
+    try:
+        return validate_identifier(value, field_name=field_name)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name}"
+        )
+
 
 
 @router.post("/upload/file", response_model=Dict[str, Any])
@@ -23,6 +76,10 @@ async def upload_file(
     """
     Upload and process a CSV or Excel file
     """
+    if dataset_name:
+        dataset_name = sanitize_input(dataset_name)
+    if description:
+        description = sanitize_input(description)
     # Validate file size (limit to 50MB)
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
@@ -32,20 +89,21 @@ async def upload_file(
             detail="File size exceeds 50MB limit"
         )
 
-    # Validate file type
-    allowed_extensions = ['.csv', '.xlsx', '.xls', '.txt']
+    # Validate file type and sanitize filename
     if file.filename is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must have a filename"
         )
-    file_extension = '.' + file.filename.split('.')[-1].lower()
 
-    if file_extension not in allowed_extensions:
+    if not is_allowed_file(file.filename, file.content_type):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File type {file_extension} not supported. Allowed types: {', '.join(allowed_extensions)}"
+            detail=f"File type not supported or filename is insecure."
         )
+
+    sanitized_filename = sanitize_filename(file.filename)
+    file.filename = sanitized_filename
 
     # Process the file
     import_service = DataImportService(db)
@@ -69,6 +127,10 @@ async def upload_json_data(
     """
     Upload JSON data directly
     """
+    dataset_name = sanitize_input(dataset_name)
+    data = sanitize_input(data)
+    if description:
+        description = sanitize_input(description)
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -113,6 +175,7 @@ async def get_dataset(
     """
     Get details of a specific dataset
     """
+    dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
         raise HTTPException(
@@ -132,6 +195,7 @@ async def delete_dataset(
     """
     Delete a dataset (only by owner or admin)
     """
+    dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
         raise HTTPException(
@@ -231,6 +295,7 @@ async def get_dataset_columns(
     """
     Get columns for a specific dataset
     """
+    dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
     # First verify the dataset exists
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
@@ -253,6 +318,7 @@ async def get_dataset_profile(
     """
     Get comprehensive data profile for a dataset
     """
+    dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
     # Get dataset
     dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:

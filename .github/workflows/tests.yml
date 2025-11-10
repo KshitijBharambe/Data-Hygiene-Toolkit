@@ -1,0 +1,185 @@
+# ============================================================================
+# GitHub Actions Workflow - Run Tests
+# Triggers: Pull requests, pushes to main
+# ============================================================================
+
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'api/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'tests/**'
+  workflow_dispatch: # Manual trigger
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install UV package manager
+        run: pip install uv
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e .
+          uv pip install --system pytest pytest-cov pytest-asyncio httpx
+
+      - name: Run linting
+        run: |
+          uv pip install --system ruff black mypy
+          black --check api/
+          ruff check api/
+          # mypy api/  # Uncomment when type hints are complete
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/test_db
+          ASYNC_DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/test_db
+          STORAGE_TYPE: local
+          JWT_SECRET_KEY: test-secret-key-for-ci
+          ENVIRONMENT: test
+        run: |
+          pytest tests/ \
+            --cov=api \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 80
+          MINIMUM_ORANGE: 60
+
+  lint-frontend:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run TypeScript check
+        working-directory: frontend
+        run: npm run type-check || npx tsc --noEmit
+
+      - name: Check formatting
+        working-directory: frontend
+        run: npm run format:check || npx prettier --check .
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Python security check
+        run: |
+          pip install safety
+          safety check --json || true
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-backend, lint-frontend, security-scan]
+    if: always()
+    
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.test-backend.result }}" != "success" ]]; then
+            echo "❌ Backend tests failed"
+            exit 1
+          fi
+          if [[ "${{ needs.lint-frontend.result }}" != "success" ]]; then
+            echo "⚠️  Frontend linting issues"
+            exit 1
+          fi
+          echo "✅ All tests passed!"

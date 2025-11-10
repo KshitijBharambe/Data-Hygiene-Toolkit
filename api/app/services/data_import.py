@@ -3,6 +3,7 @@ import json
 import hashlib
 import uuid
 import os
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from fastapi import UploadFile, HTTPException, status
@@ -11,6 +12,15 @@ from io import BytesIO
 
 from app.models import Dataset, DatasetVersion, DatasetColumn, SourceType, DatasetStatus, User
 from app.schemas import DatasetResponse, DatasetColumnResponse, DataProfileResponse
+from app.utils import (
+    MemoryMonitor,
+    ChunkedDataFrameReader,
+    OptimizedDataFrameOperations,
+    estimate_file_memory
+)
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Configuration for data storage
 DATASET_STORAGE_PATH = Path("data/datasets")
@@ -20,6 +30,11 @@ class DataImportService:
 
     def __init__(self, db: Session):
         self.db = db
+        # Initialize chunked reader with optimized settings
+        self.chunked_reader = ChunkedDataFrameReader(
+            chunk_size=10000,
+            memory_threshold_mb=150
+        )
         # Ensure storage directory exists
         DATASET_STORAGE_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -67,22 +82,56 @@ class DataImportService:
             return SourceType.other
 
     def read_file_to_dataframe(self, file_content: bytes, source_type: SourceType, filename: str) -> pd.DataFrame:
-        """Convert file content to pandas DataFrame"""
+        """Convert file content to pandas DataFrame with memory optimization"""
+
+        # Estimate memory requirement
+        file_size_bytes = len(file_content)
+        file_size_mb = file_size_bytes / 1024 / 1024
+        estimated_memory = estimate_file_memory(
+            file_size_bytes,
+            'csv' if source_type == SourceType.csv else 'excel'
+        )
+
+        MemoryMonitor.log_memory_usage("before file read")
+        logger.info(f"Processing file: {filename} ({file_size_mb:.2f}MB, estimated memory: {estimated_memory:.2f}MB)")
+
         try:
             if source_type == SourceType.csv:
-                # Try different encodings
-                for encoding in ['utf-8', 'latin-1', 'cp1252']:
-                    try:
-                        df = pd.read_csv(
-                            BytesIO(file_content), encoding=encoding)
-                        break
-                    except UnicodeDecodeError:
-                        continue
+                # Check if we should use chunking based on file size
+                if estimated_memory > 50:  # >50MB estimated
+                    logger.info(f"Large file detected ({estimated_memory:.2f}MB estimated), using chunked read")
+
+                    # Try different encodings with chunking
+                    for encoding in ['utf-8', 'latin-1', 'cp1252']:
+                        try:
+                            chunks = []
+                            for chunk in self.chunked_reader.read_csv_chunked(file_content, encoding=encoding):
+                                chunks.append(chunk)
+
+                            if chunks:
+                                df = pd.concat(chunks, ignore_index=True)
+                                del chunks  # Free memory
+                                break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Could not decode CSV file with any supported encoding"
+                        )
                 else:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Could not decode CSV file with any supported encoding"
-                    )
+                    # Small file, read normally
+                    for encoding in ['utf-8', 'latin-1', 'cp1252']:
+                        try:
+                            df = pd.read_csv(BytesIO(file_content), encoding=encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Could not decode CSV file with any supported encoding"
+                        )
 
             elif source_type == SourceType.excel:
                 df = pd.read_excel(BytesIO(file_content))
@@ -93,9 +142,21 @@ class DataImportService:
                     detail=f"Unsupported file type for {filename}"
                 )
 
+            MemoryMonitor.log_memory_usage("after file read")
+
+            # Optimize DataFrame dtypes to save memory
+            logger.info("Optimizing DataFrame dtypes")
+            df = OptimizedDataFrameOperations.optimize_dtypes(df)
+
+            MemoryMonitor.log_memory_usage("after dtype optimization")
+
             return df
 
+        except HTTPException:
+            # Re-raise HTTPExceptions as-is
+            raise
         except Exception as e:
+            MemoryMonitor.log_memory_usage("error during read")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Error processing file {filename}: {str(e)}"

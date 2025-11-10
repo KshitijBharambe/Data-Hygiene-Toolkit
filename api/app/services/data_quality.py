@@ -9,10 +9,15 @@ from fastapi import HTTPException, status
 
 from app.models import (
     Dataset, DatasetVersion, DatasetColumn, Issue, Fix, Execution,
-    DatasetStatus, User, SourceType
+    DatasetStatus, User, SourceType, VersionSource, ExecutionRule, Rule,
+    DataQualityMetrics, Criticality
 )
-from app.schemas import FixCreate, FixResponse
+from app.schemas import FixCreate, FixResponse, QualityMetricsResponse
 from app.services.data_import import DataImportService
+from app.constants import (
+    CRITICALITY_WEIGHTS, METRIC_STATUS_OK, METRIC_STATUS_NOT_AVAILABLE,
+    METRIC_NO_EXECUTION_MESSAGE
+)
 
 
 class DataQualityService:
@@ -482,7 +487,7 @@ class DataQualityService:
         latest_version = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_id)
-            .order_by(DatasetVersion.version_number.desc())
+            .order_by(DatasetVersion.version_no.desc())
             .first()
         )
 
@@ -493,7 +498,7 @@ class DataQualityService:
             )
 
         # Load the dataframe
-        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_no)
 
         corrections_applied = 0
         errors = []
@@ -525,7 +530,7 @@ class DataQualityService:
 
         # Save the corrected dataset as a new version
         if corrections_applied > 0:
-            new_version_number = latest_version.version_number + 1
+            new_version_number = latest_version.version_no + 1
             file_path = self.data_import_service.save_dataset_file(
                 dataset_id, df, new_version_number
             )
@@ -533,11 +538,13 @@ class DataQualityService:
             # Create new dataset version record
             new_version = DatasetVersion(
                 dataset_id=dataset_id,
-                version_number=new_version_number,
+                version_no=new_version_number,
                 file_path=file_path,
-                row_count=len(df),
-                column_count=len(df.columns),
-                notes=f"Applied {corrections_applied} manual corrections"
+                rows=len(df),
+                columns=len(df.columns),
+                change_note=f"Applied {corrections_applied} manual corrections",
+                created_by=user_id,
+                source=VersionSource.manual_edit
             )
             self.db.add(new_version)
             self.db.commit()
@@ -548,8 +555,108 @@ class DataQualityService:
             "new_version_number": new_version_number if corrections_applied > 0 else None
         }
 
+    def create_data_quality_summary_from_db(self, dataset_id: str) -> Dict[str, Any]:
+        """
+        Generate data quality summary using only database records (no file loading).
+        This is optimized for bulk operations like getting all dataset quality scores.
+        Uses the new DQI/CleanRowsPct/Hybrid metrics from the latest execution.
+
+        Args:
+            dataset_id: Dataset ID to summarize
+
+        Returns:
+            Quality summary dictionary with new metrics from database
+        """
+        # Get dataset and latest version
+        dataset = self.db.query(Dataset).filter(Dataset.id == dataset_id).first()
+        if not dataset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dataset not found"
+            )
+
+        latest_version = (
+            self.db.query(DatasetVersion)
+            .filter(DatasetVersion.dataset_id == dataset_id)
+            .order_by(DatasetVersion.version_no.desc())
+            .first()
+        )
+
+        if not latest_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No dataset version found for dataset {dataset_id}"
+            )
+
+        # Get execution history and issues (from database only)
+        executions = (
+            self.db.query(Execution)
+            .filter(Execution.dataset_version_id == latest_version.id)
+            .order_by(Execution.started_at.desc())
+            .all()
+        )
+
+        # Calculate total issues from execution issues relationship
+        total_issues = sum(len(exec.issues) for exec in executions if exec.issues)
+        execution_ids = [e.id for e in executions]
+        total_fixes = (
+            self.db.query(Fix)
+            .join(Issue)
+            .filter(Issue.execution_id.in_(execution_ids))
+            .count()
+        ) if execution_ids else 0
+
+        # Get quality metrics from the latest execution (new system)
+        dqi = 0.0
+        clean_rows_pct = 0.0
+        hybrid = 0.0
+
+        if executions:
+            latest_execution = executions[0]
+            # Try to get computed metrics from DataQualityMetrics table
+            quality_metrics = self.db.query(DataQualityMetrics).filter(
+                DataQualityMetrics.execution_id == latest_execution.id
+            ).first()
+
+            if quality_metrics:
+                dqi = float(quality_metrics.dqi)
+                clean_rows_pct = float(quality_metrics.clean_rows_pct)
+                hybrid = float(quality_metrics.hybrid)
+            else:
+                # Compute on-demand if not cached
+                try:
+                    metrics_response = self.compute_quality_metrics(latest_execution.id)
+                    dqi = metrics_response.dqi
+                    clean_rows_pct = metrics_response.clean_rows_pct
+                    hybrid = metrics_response.hybrid
+                except:
+                    # If computation fails, default to 0
+                    pass
+
+        return {
+            "dataset_id": dataset_id,
+            "dataset_name": dataset.name,
+            "current_version": latest_version.version_no,
+            "total_rows": latest_version.rows,
+            "total_columns": latest_version.columns,
+            "total_issues_found": total_issues,
+            "total_fixes_applied": total_fixes,
+            "dqi": round(dqi, 2),
+            "clean_rows_pct": round(clean_rows_pct, 2),
+            "hybrid": round(hybrid, 2),
+            "execution_summary": {
+                "total_executions": len(executions),
+                "last_execution": executions[-1].started_at if executions else None,
+                "success_rate": len([e for e in executions if e.status.value == "succeeded"]) / len(executions) * 100 if executions else 0
+            },
+            "note": "Summary calculated from database records using DQI/CleanRowsPct/Hybrid metrics. Use detailed endpoint for full file analysis."
+        }
+
     def create_data_quality_summary(self, dataset_id: str) -> Dict[str, Any]:
-        """Generate comprehensive data quality summary for a dataset"""
+        """
+        Generate comprehensive data quality summary for a dataset.
+        Uses the new DQI/CleanRowsPct/Hybrid metrics from the latest execution.
+        """
 
         # Get dataset and latest version
         dataset = self.db.query(Dataset).filter(Dataset.id == dataset_id).first()
@@ -562,21 +669,35 @@ class DataQualityService:
         latest_version = (
             self.db.query(DatasetVersion)
             .filter(DatasetVersion.dataset_id == dataset_id)
-            .order_by(DatasetVersion.version_number.desc())
+            .order_by(DatasetVersion.version_no.desc())
             .first()
         )
 
+        if not latest_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No dataset version found for dataset {dataset_id}"
+            )
+
         # Load the dataframe for analysis
-        df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_number)
+        try:
+            df = self.data_import_service.load_dataset_file(dataset_id, latest_version.version_no)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to load dataset file: {str(e)}"
+            )
 
         # Get execution history and issues
         executions = (
             self.db.query(Execution)
             .filter(Execution.dataset_version_id == latest_version.id)
+            .order_by(Execution.started_at.desc())
             .all()
         )
 
-        total_issues = sum(exec.issues_found for exec in executions if exec.issues_found)
+        # Calculate total issues from execution issues relationship
+        total_issues = sum(len(exec.issues) for exec in executions)
         total_fixes = (
             self.db.query(Fix)
             .join(Issue)
@@ -584,25 +705,51 @@ class DataQualityService:
             .count()
         )
 
-        # Basic data quality metrics
-        quality_score = self._calculate_quality_score(df)
+        # Get quality metrics from the latest execution (new system)
+        dqi = 0.0
+        clean_rows_pct = 0.0
+        hybrid = 0.0
+
+        if executions:
+            latest_execution = executions[0]
+            # Try to get computed metrics from DataQualityMetrics table
+            quality_metrics = self.db.query(DataQualityMetrics).filter(
+                DataQualityMetrics.execution_id == latest_execution.id
+            ).first()
+
+            if quality_metrics:
+                dqi = float(quality_metrics.dqi)
+                clean_rows_pct = float(quality_metrics.clean_rows_pct)
+                hybrid = float(quality_metrics.hybrid)
+            else:
+                # Compute on-demand if not cached
+                try:
+                    metrics_response = self.compute_quality_metrics(latest_execution.id)
+                    dqi = metrics_response.dqi
+                    clean_rows_pct = metrics_response.clean_rows_pct
+                    hybrid = metrics_response.hybrid
+                except:
+                    # If computation fails, default to 0
+                    pass
 
         return {
             "dataset_id": dataset_id,
             "dataset_name": dataset.name,
-            "current_version": latest_version.version_number,
+            "current_version": latest_version.version_no,
             "total_rows": len(df),
             "total_columns": len(df.columns),
-            "missing_data_percentage": float((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100),
+            "missing_data_percentage": float((df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100) if len(df) * len(df.columns) > 0 else 0,
             "duplicate_rows": int(df.duplicated().sum()),
             "total_issues_found": total_issues,
             "total_fixes_applied": total_fixes,
-            "data_quality_score": quality_score,
+            "dqi": round(dqi, 2),
+            "clean_rows_pct": round(clean_rows_pct, 2),
+            "hybrid": round(hybrid, 2),
             "column_quality": self._analyze_column_quality(df),
             "execution_summary": {
                 "total_executions": len(executions),
-                "last_execution": executions[-1].created_at if executions else None,
-                "success_rate": len([e for e in executions if e.status == "succeeded"]) / len(executions) * 100 if executions else 0
+                "last_execution": executions[-1].started_at if executions else None,
+                "success_rate": len([e for e in executions if e.status.value == "succeeded"]) / len(executions) * 100 if executions else 0
             }
         }
 
@@ -687,3 +834,163 @@ class DataQualityService:
             return len(outliers)
         except:
             return 0
+
+    # === DATA QUALITY METRICS ===
+
+    def compute_quality_metrics(self, execution_id: str) -> QualityMetricsResponse:
+        """
+        Compute comprehensive data quality metrics for an execution.
+
+        Implements three key metrics:
+        1. DQI (Data Quality Index) - weighted constraint satisfaction score (0-100)
+        2. CleanRowsPct - percentage of rows without any issues (0-100)
+        3. Hybrid - harmonic mean of DQI and CleanRowsPct (0-100)
+
+        Args:
+            execution_id: The execution to compute metrics for
+
+        Returns:
+            QualityMetricsResponse with computed metrics
+        """
+        import uuid
+        from datetime import datetime, timezone
+
+        # Check if metrics already exist (cached)
+        existing_metrics = self.db.query(DataQualityMetrics).filter(
+            DataQualityMetrics.execution_id == execution_id
+        ).first()
+
+        if existing_metrics:
+            return QualityMetricsResponse(
+                execution_id=existing_metrics.execution_id,
+                dataset_version_id=existing_metrics.dataset_version_id,
+                dqi=float(existing_metrics.dqi),
+                clean_rows_pct=float(existing_metrics.clean_rows_pct),
+                hybrid=float(existing_metrics.hybrid),
+                status=existing_metrics.status,
+                message=existing_metrics.message,
+                computed_at=existing_metrics.computed_at
+            )
+
+        # Get execution
+        execution = self.db.query(Execution).filter(
+            Execution.id == execution_id
+        ).first()
+
+        if not execution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Execution not found"
+            )
+
+        # Get dataset version
+        dataset_version = self.db.query(DatasetVersion).filter(
+            DatasetVersion.id == execution.dataset_version_id
+        ).first()
+
+        if not dataset_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dataset version not found"
+            )
+
+        # Get execution rules
+        execution_rules = self.db.query(ExecutionRule).filter(
+            ExecutionRule.execution_id == execution_id
+        ).all()
+
+        # Base case: no rules evaluated
+        if not execution_rules or dataset_version.rows == 0:
+            metrics = DataQualityMetrics(
+                id=str(uuid.uuid4()),
+                execution_id=execution_id,
+                dataset_version_id=execution.dataset_version_id,
+                dqi=0.0,
+                clean_rows_pct=0.0,
+                hybrid=0.0,
+                status=METRIC_STATUS_NOT_AVAILABLE,
+                message=METRIC_NO_EXECUTION_MESSAGE,
+                computed_at=datetime.now(timezone.utc)
+            )
+            self.db.add(metrics)
+            self.db.commit()
+            self.db.refresh(metrics)
+
+            return QualityMetricsResponse(
+                execution_id=metrics.execution_id,
+                dataset_version_id=metrics.dataset_version_id,
+                dqi=0.0,
+                clean_rows_pct=0.0,
+                hybrid=0.0,
+                status=METRIC_STATUS_NOT_AVAILABLE,
+                message=METRIC_NO_EXECUTION_MESSAGE,
+                computed_at=metrics.computed_at
+            )
+
+        # Compute metrics
+        total_rows = max(1, dataset_version.rows)
+
+        # 1. Compute DQI (Data Quality Index)
+        weighted_sum = 0.0
+        total_weight = 0.0
+
+        for exec_rule in execution_rules:
+            # Get rule to access criticality
+            rule = self.db.query(Rule).filter(Rule.id == exec_rule.rule_id).first()
+            if not rule:
+                continue
+
+            # Get weight for this rule's criticality
+            criticality_str = rule.criticality.value if hasattr(rule.criticality, 'value') else str(rule.criticality)
+            weight = CRITICALITY_WEIGHTS.get(criticality_str, 1)
+
+            # Compute pass rate for this rule
+            rows_flagged = exec_rule.rows_flagged or 0
+            pass_rate = 1.0 - (rows_flagged / total_rows)
+
+            weighted_sum += weight * pass_rate
+            total_weight += weight
+
+        dqi = 100.0 * (weighted_sum / max(1, total_weight))
+
+        # 2. Compute CleanRowsPct
+        # Count unique dirty rows (rows with at least one issue)
+        unique_dirty_rows_query = self.db.query(Issue.row_index).filter(
+            Issue.execution_id == execution_id
+        ).distinct()
+        unique_dirty_count = unique_dirty_rows_query.count()
+
+        clean_rows_pct = 100.0 * (1.0 - (unique_dirty_count / total_rows))
+
+        # 3. Compute Hybrid (harmonic mean)
+        if dqi + clean_rows_pct > 1e-9:
+            hybrid = 2.0 * dqi * clean_rows_pct / (dqi + clean_rows_pct)
+        else:
+            hybrid = 0.0
+
+        # Store metrics in database
+        metrics = DataQualityMetrics(
+            id=str(uuid.uuid4()),
+            execution_id=execution_id,
+            dataset_version_id=execution.dataset_version_id,
+            dqi=round(dqi, 2),
+            clean_rows_pct=round(clean_rows_pct, 2),
+            hybrid=round(hybrid, 2),
+            status=METRIC_STATUS_OK,
+            message=None,
+            computed_at=datetime.now(timezone.utc)
+        )
+        self.db.add(metrics)
+        self.db.commit()
+        self.db.refresh(metrics)
+
+        return QualityMetricsResponse(
+            execution_id=metrics.execution_id,
+            dataset_version_id=metrics.dataset_version_id,
+            dqi=float(metrics.dqi),
+            clean_rows_pct=float(metrics.clean_rows_pct),
+            hybrid=float(metrics.hybrid),
+            status=metrics.status,
+            message=metrics.message,
+            computed_at=metrics.computed_at
+        )

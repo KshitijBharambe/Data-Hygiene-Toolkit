@@ -1,15 +1,20 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Text, ForeignKey, func
+from sqlalchemy import Column, String, Integer, Boolean, Text, ForeignKey, func
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, ENUM
+from sqlalchemy.dialects.postgresql import UUID, ENUM, TIMESTAMP
+from sqlalchemy.types import DateTime as SQLAlchemyDateTime
 from app.database import Base
 import uuid
 import enum
+from datetime import datetime, timezone
 
 # Enums
+
+
 class UserRole(enum.Enum):
     admin = "admin"
     analyst = "analyst"
     viewer = "viewer"
+
 
 class SourceType(enum.Enum):
     csv = "csv"
@@ -18,6 +23,7 @@ class SourceType(enum.Enum):
     ms_dynamics = "ms_dynamics"
     other = "other"
 
+
 class DatasetStatus(enum.Enum):
     uploaded = "uploaded"
     profiled = "profiled"
@@ -25,11 +31,13 @@ class DatasetStatus(enum.Enum):
     cleaned = "cleaned"
     exported = "exported"
 
+
 class Criticality(enum.Enum):
     low = "low"
     medium = "medium"
     high = "high"
     critical = "critical"
+
 
 class RuleKind(enum.Enum):
     missing_data = "missing_data"
@@ -40,6 +48,11 @@ class RuleKind(enum.Enum):
     char_restriction = "char_restriction"
     regex = "regex"
     custom = "custom"
+    statistical_outlier = "statistical_outlier"
+    distribution_check = "distribution_check"
+    correlation_validation = "correlation_validation"
+    ml_anomaly = "ml_anomaly"
+
 
 class ExecutionStatus(enum.Enum):
     queued = "queued"
@@ -48,6 +61,7 @@ class ExecutionStatus(enum.Enum):
     failed = "failed"
     partially_succeeded = "partially_succeeded"
 
+
 class ExportFormat(enum.Enum):
     csv = "csv"
     excel = "excel"
@@ -55,19 +69,30 @@ class ExportFormat(enum.Enum):
     api = "api"
     datalake = "datalake"
 
+
+class VersionSource(enum.Enum):
+    upload = "upload"  # Original upload
+    fixes_applied = "fixes_applied"  # Created by applying fixes
+    manual_edit = "manual_edit"  # Manual modifications
+    transformation = "transformation"  # Other transformations
+
 # Models
+
+
 class User(Base):
     __tablename__ = "users"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     role = Column(ENUM(UserRole), nullable=False)
     auth_provider = Column(String)
     auth_subject = Column(String)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
     # Relationships
     uploaded_datasets = relationship("Dataset", back_populates="uploader")
     created_rules = relationship("Rule", back_populates="creator")
@@ -75,64 +100,83 @@ class User(Base):
     fixed_issues = relationship("Fix", back_populates="fixer")
     created_exports = relationship("Export", back_populates="creator")
 
+
 class Dataset(Base):
     __tablename__ = "datasets"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String, nullable=False)
     source_type = Column(ENUM(SourceType), nullable=False)
     original_filename = Column(String)
     checksum = Column(String)
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=False)
-    uploaded_at = Column(DateTime, server_default=func.now())
+    uploaded_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     status = Column(ENUM(DatasetStatus), default=DatasetStatus.uploaded)
     row_count = Column(Integer)
     column_count = Column(Integer)
     notes = Column(Text)
-    
+
     # Relationships
     uploader = relationship("User", back_populates="uploaded_datasets")
     versions = relationship("DatasetVersion", back_populates="dataset")
     columns = relationship("DatasetColumn", back_populates="dataset")
 
+
 class DatasetVersion(Base):
     __tablename__ = "dataset_versions"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
     version_no = Column(Integer, nullable=False)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     rows = Column(Integer)
     columns = Column(Integer)
     change_note = Column(Text)
-    
+
+    # Track version lineage and source
+    parent_version_id = Column(String, ForeignKey(
+        "dataset_versions.id"), nullable=True)
+    source = Column(ENUM(VersionSource),
+                    default=VersionSource.upload, nullable=False)
+    file_path = Column(String)  # Path to the actual data file
+
     # Relationships
     dataset = relationship("Dataset", back_populates="versions")
     creator = relationship("User")
     executions = relationship("Execution", back_populates="dataset_version")
     exports = relationship("Export", back_populates="dataset_version")
-    journal_entries = relationship("VersionJournal", back_populates="dataset_version")
+    journal_entries = relationship(
+        "VersionJournal", back_populates="dataset_version")
+    parent_version = relationship("DatasetVersion", remote_side=[
+                                  id], foreign_keys=[parent_version_id])
+
 
 class DatasetColumn(Base):
     __tablename__ = "dataset_columns"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
     name = Column(String, nullable=False)
     ordinal_position = Column(Integer, nullable=False)
     inferred_type = Column(String)
     is_nullable = Column(Boolean, default=True)
-    
+
     # Relationships
     dataset = relationship("Dataset", back_populates="columns")
     rule_columns = relationship("RuleColumn", back_populates="column")
 
+
 class Rule(Base):
     __tablename__ = "rules"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    name = Column(String, unique=True, nullable=False)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    # Removed unique constraint for versioning
+    name = Column(String, nullable=False, index=True)
     description = Column(Text)
     kind = Column(ENUM(RuleKind), nullable=False)
     criticality = Column(ENUM(Criticality), nullable=False)
@@ -141,69 +185,107 @@ class Rule(Base):
     target_columns = Column(Text)
     params = Column(Text)  # JSON as text
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Versioning fields
+    version = Column(Integer, default=1, nullable=False)
+    parent_rule_id = Column(String, ForeignKey("rules.id"), nullable=True)
+    is_latest = Column(Boolean, default=True, nullable=False, index=True)
+    change_log = Column(Text, nullable=True)  # JSON string of changes
+    # Denormalized root rule ID for faster queries
+    rule_family_id = Column(String, ForeignKey(
+        "rules.id"), nullable=True, index=True)
+
+    # Dependency management fields
+    # JSON string of dependent rule IDs
+    dependencies = Column(Text, nullable=True)
+    # Lower numbers = higher priority
+    priority = Column(Integer, nullable=True, default=0)
+    # Explicit execution order
+    execution_order = Column(Integer, nullable=True)
+    dependency_group = Column(String, nullable=True)  # Group for related rules
+
     # Relationships
     creator = relationship("User", back_populates="created_rules")
     rule_columns = relationship("RuleColumn", back_populates="rule")
     execution_rules = relationship("ExecutionRule", back_populates="rule")
     issues = relationship("Issue", back_populates="rule")
+    child_versions = relationship("Rule", backref="parent_version", remote_side=[
+                                  id], foreign_keys=[parent_rule_id])
+
 
 class RuleColumn(Base):
     __tablename__ = "rule_columns"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     rule_id = Column(String, ForeignKey("rules.id"), nullable=False)
-    column_id = Column(String, ForeignKey("dataset_columns.id"), nullable=False)
-    
+    column_id = Column(String, ForeignKey(
+        "dataset_columns.id"), nullable=False)
+
     # Relationships
     rule = relationship("Rule", back_populates="rule_columns")
     column = relationship("DatasetColumn", back_populates="rule_columns")
 
+
 class Execution(Base):
     __tablename__ = "executions"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    dataset_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=False)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id"), nullable=False)
     started_by = Column(String, ForeignKey("users.id"), nullable=False)
-    started_at = Column(DateTime, server_default=func.now())
-    finished_at = Column(DateTime)
+    started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    finished_at = Column(TIMESTAMP(timezone=True))
     status = Column(ENUM(ExecutionStatus), default=ExecutionStatus.queued)
     total_rows = Column(Integer)
     total_rules = Column(Integer)
     rows_affected = Column(Integer)
     columns_affected = Column(Integer)
     summary = Column(Text)  # JSON as text
-    
+
     # Relationships
-    dataset_version = relationship("DatasetVersion", back_populates="executions")
+    dataset_version = relationship(
+        "DatasetVersion", back_populates="executions")
     starter = relationship("User", back_populates="started_executions")
     execution_rules = relationship("ExecutionRule", back_populates="execution")
     issues = relationship("Issue", back_populates="execution")
     exports = relationship("Export", back_populates="execution")
 
+
 class ExecutionRule(Base):
     __tablename__ = "execution_rules"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
-    rule_id = Column(String, ForeignKey("rules.id"), nullable=False)
+    rule_id = Column(String, ForeignKey("rules.id", ondelete="SET NULL"),
+                     nullable=True)  # Nullable to allow rule deletion
+    # JSON snapshot of rule at execution time
+    rule_snapshot = Column(Text, nullable=True)
     error_count = Column(Integer, default=0)
     rows_flagged = Column(Integer, default=0)
     cols_flagged = Column(Integer, default=0)
     note = Column(Text)
-    
+
     # Relationships
     execution = relationship("Execution", back_populates="execution_rules")
     rule = relationship("Rule", back_populates="execution_rules")
 
+
 class Issue(Base):
     __tablename__ = "issues"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
-    rule_id = Column(String, ForeignKey("rules.id"), nullable=False)
+    rule_id = Column(String, ForeignKey("rules.id", ondelete="SET NULL"),
+                     nullable=True)  # Nullable to allow rule deletion
+    # Lightweight JSON snapshot of rule info
+    rule_snapshot = Column(Text, nullable=True)
     row_index = Column(Integer, nullable=False)
     column_name = Column(String, nullable=False)
     current_value = Column(Text)
@@ -211,54 +293,252 @@ class Issue(Base):
     message = Column(Text)
     category = Column(String)
     severity = Column(ENUM(Criticality), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     resolved = Column(Boolean, default=False)
-    
+
     # Relationships
     execution = relationship("Execution", back_populates="issues")
     rule = relationship("Rule", back_populates="issues")
     fixes = relationship("Fix", back_populates="issue")
 
+
 class Fix(Base):
     __tablename__ = "fixes"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
     issue_id = Column(String, ForeignKey("issues.id"), nullable=False)
     fixed_by = Column(String, ForeignKey("users.id"), nullable=False)
-    fixed_at = Column(DateTime, server_default=func.now())
+    fixed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     new_value = Column(Text)
     comment = Column(Text)
-    
+
+    # Track if and when this fix was applied to create a new dataset version
+    applied_in_version_id = Column(String, ForeignKey(
+        "dataset_versions.id"), nullable=True)
+    applied_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
     # Relationships
     issue = relationship("Issue", back_populates="fixes")
     fixer = relationship("User", back_populates="fixed_issues")
+    applied_version = relationship(
+        "DatasetVersion", foreign_keys=[applied_in_version_id])
+
 
 class Export(Base):
     __tablename__ = "exports"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    dataset_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=False)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id"), nullable=False)
     execution_id = Column(String, ForeignKey("executions.id"))
     format = Column(ENUM(ExportFormat), nullable=False)
     location = Column(String)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, server_default=func.now())
-    
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
     # Relationships
     dataset_version = relationship("DatasetVersion", back_populates="exports")
     execution = relationship("Execution", back_populates="exports")
     creator = relationship("User", back_populates="created_exports")
 
+
 class VersionJournal(Base):
     __tablename__ = "version_journal"
-    
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
-    dataset_version_id = Column(String, ForeignKey("dataset_versions.id"), nullable=False)
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id"), nullable=False)
     event = Column(String, nullable=False)
     rows_affected = Column(Integer)
     columns_affected = Column(Integer)
     details = Column(Text)
-    occurred_at = Column(DateTime, server_default=func.now())
-    
+    occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
     # Relationships
-    dataset_version = relationship("DatasetVersion", back_populates="journal_entries")
+    dataset_version = relationship(
+        "DatasetVersion", back_populates="journal_entries")
+
+
+class DataQualityMetrics(Base):
+    __tablename__ = "data_quality_metrics"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey(
+        "executions.id", ondelete="CASCADE"), nullable=False, unique=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id", ondelete="CASCADE"), nullable=False)
+    dqi = Column(Integer, nullable=False, default=0)
+    clean_rows_pct = Column(Integer, nullable=False, default=0)
+    hybrid = Column(Integer, nullable=False, default=0)
+    status = Column(String, nullable=False, default="not_available")
+    message = Column(Text)
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    execution = relationship("Execution")
+    dataset_version = relationship("DatasetVersion")
+
+
+# Advanced Features Models
+
+
+class RuleTemplate(Base):
+    __tablename__ = "rule_templates"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text)
+    # e.g., 'statistical', 'ml', 'validation'
+    category = Column(String, nullable=False, index=True)
+    template_kind = Column(ENUM(RuleKind), nullable=False)
+    template_params = Column(Text)  # JSON template with placeholders
+    is_active = Column(Boolean, default=True)
+    usage_count = Column(Integer, default=0)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User")
+    suggestions = relationship("RuleSuggestion", back_populates="template")
+
+
+class RuleSuggestion(Base):
+    __tablename__ = "rule_suggestions"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_id = Column(String, ForeignKey("datasets.id"), nullable=False)
+    template_id = Column(String, ForeignKey(
+        "rule_templates.id"), nullable=True)
+    suggested_rule_name = Column(String, nullable=False)
+    suggested_params = Column(Text)  # JSON with filled-in parameters
+    confidence_score = Column(Integer)  # 0-100 confidence in suggestion
+    # 'template_based', 'ml_based', 'statistical'
+    suggestion_type = Column(String)
+    reasoning = Column(Text)  # Why this rule is suggested
+    is_applied = Column(Boolean, default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    applied_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    applied_by = Column(String, ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    dataset = relationship("Dataset")
+    template = relationship("RuleTemplate", back_populates="suggestions")
+    applier = relationship("User")
+
+
+class MLModel(Base):
+    __tablename__ = "ml_models"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    name = Column(String, nullable=False, index=True)
+    # 'isolation_forest', 'one_class_svm', etc.
+    model_type = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    model_path = Column(String)  # Path to serialized model file
+    # JSON with training parameters, feature names, etc.
+    model_metadata = Column(Text)
+    training_dataset_id = Column(
+        String, ForeignKey("datasets.id"), nullable=True)
+    # JSON with accuracy, precision, recall, etc.
+    training_metrics = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    creator = relationship("User")
+    anomaly_scores = relationship("AnomalyScore", back_populates="model")
+
+
+class AnomalyScore(Base):
+    __tablename__ = "anomaly_scores"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
+    model_id = Column(String, ForeignKey("ml_models.id"), nullable=False)
+    row_index = Column(Integer, nullable=False)
+    # 0-100, higher = more anomalous
+    anomaly_score = Column(Integer, nullable=False)
+    features_used = Column(Text)  # JSON list of feature names used for scoring
+    # JSON with actual feature values for this row
+    feature_values = Column(Text)
+    # Threshold that classified this as anomaly
+    threshold_used = Column(Integer)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    execution = relationship("Execution")
+    model = relationship("MLModel", back_populates="anomaly_scores")
+
+
+class StatisticalMetrics(Base):
+    __tablename__ = "statistical_metrics"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id", ondelete="CASCADE"), nullable=False)
+    column_name = Column(String, nullable=False)
+    # 'descriptive', 'distribution', 'correlation'
+    metric_type = Column(String, nullable=False)
+    # 'mean', 'std', 'skewness', etc.
+    metric_name = Column(String, nullable=False)
+    metric_value = Column(Integer)  # Store as integer for consistency
+    additional_data = Column(Text)  # JSON for complex metrics like histograms
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    dataset_version = relationship("DatasetVersion")
+
+
+class DatasetProfile(Base):
+    __tablename__ = "dataset_profiles"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    dataset_version_id = Column(String, ForeignKey(
+        "dataset_versions.id", ondelete="CASCADE"), nullable=False, unique=True)
+    profile_summary = Column(Text)  # JSON with overall dataset statistics
+    column_profiles = Column(Text)  # JSON with detailed column statistics
+    data_quality_score = Column(Integer)  # 0-100 overall quality score
+    recommendations = Column(Text)  # JSON with rule suggestions
+    profiling_version = Column(String, default="1.0")
+    computed_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Relationships
+    dataset_version = relationship("DatasetVersion")
+
+
+class DebugSession(Base):
+    __tablename__ = "debug_sessions"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    execution_id = Column(String, ForeignKey("executions.id"), nullable=False)
+    session_name = Column(String, nullable=False)
+    debug_data = Column(Text)  # JSON with execution traces, performance data
+    breakpoints = Column(Text)  # JSON with debug breakpoints
+    # JSON with variable states at different points
+    variable_snapshots = Column(Text)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    execution = relationship("Execution")
+    creator = relationship("User")

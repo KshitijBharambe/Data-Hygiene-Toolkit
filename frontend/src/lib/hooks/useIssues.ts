@@ -6,6 +6,7 @@ export interface Issue {
   id: string;
   execution_id: string;
   rule_id: string;
+  rule_snapshot?: string; // JSON snapshot of rule at execution time
   rule_name?: string;
   row_index: number;
   column_name: string;
@@ -95,13 +96,6 @@ export function useIssues(filters?: {
   return useQuery<Issue[]>({
     queryKey: ["issues", filters],
     queryFn: async () => {
-      console.log("Fetching issues...", {
-        isAuthenticated,
-        hasToken,
-        filters,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
         // Use direct API call to /issues endpoint with proper parameters
         const params: Record<string, unknown> = {};
@@ -114,32 +108,16 @@ export function useIssues(filters?: {
         params.limit = filters?.limit || 50;
         params.offset = filters?.offset || 0;
 
-        console.log("Making request to /issues/ with params:", params);
-        console.log("API base URL:", apiClient.getToken() ? "Has token" : "No token");
-
         const response = await apiClient.get<Issue[]>("/issues/", { params });
-        console.log("Issues data success:", response.data);
         return response.data || [];
-      } catch (error: unknown) {
-        console.error("Issues data error details:", {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-
-        // Check if it's a network error specifically
-        if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_NETWORK') {
-          console.error('Network error - API may not be accessible');
-        }
-
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issues");
       }
     },
     enabled: isAuthenticated && hasToken,
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
-      console.log("Issues query retry attempt:", { failureCount, error });
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -151,29 +129,19 @@ export function useIssuesSummary(days: number = 30) {
   return useQuery<IssuesSummary>({
     queryKey: ["issues-summary", days],
     queryFn: async () => {
-      console.log("Fetching issues summary...", {
-        isAuthenticated,
-        hasToken,
-        days,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
         const response = await apiClient.get<IssuesSummary>(
           `/issues/statistics/summary?days=${days}`
         );
-        console.log("Issues summary success:", response.data);
         return response.data;
-      } catch (error) {
-        console.error("Issues summary error:", error);
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issues summary");
       }
     },
     enabled: isAuthenticated && hasToken,
     refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
-      console.log("Issues summary retry attempt:", { failureCount, error });
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -185,26 +153,18 @@ export function useIssue(issueId: string) {
   return useQuery<DetailedIssue>({
     queryKey: ["issue", issueId],
     queryFn: async () => {
-      console.log("Fetching detailed issue...", {
-        issueId,
-        isAuthenticated,
-        hasToken,
-        currentToken: apiClient.getToken() ? "present" : "missing",
-      });
-
       try {
-        const response = await apiClient.get<DetailedIssue>(`/issues/${issueId}/`);
-        console.log("Detailed issue success:", response.data);
+        const response = await apiClient.get<DetailedIssue>(
+          `/issues/${issueId}/`
+        );
         return response.data;
-      } catch (error) {
-        console.error("Detailed issue error:", error);
-        throw error;
+      } catch {
+        throw new Error("Failed to fetch issue details");
       }
     },
     enabled: isAuthenticated && hasToken && !!issueId,
     staleTime: 5000, // Consider data stale after 5 seconds
-    retry: (failureCount, error) => {
-      console.log("Issue query retry attempt:", { failureCount, error });
+    retry: (failureCount) => {
       return failureCount < 3;
     },
   });
@@ -217,33 +177,18 @@ export async function createFix(
     comment?: string;
   }
 ) {
-  try {
-    const response = await apiClient.post(`/issues/${issueId}/fix/`, fixData);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to create fix:", err);
-    throw err;
-  }
+  const response = await apiClient.post(`/issues/${issueId}/fix`, fixData);
+  return response.data;
 }
 
 export async function resolveIssue(issueId: string) {
-  try {
-    const response = await apiClient.patch(`/issues/${issueId}/resolve/`);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to resolve issue:", err);
-    throw err;
-  }
+  const response = await apiClient.patch(`/issues/${issueId}/resolve`);
+  return response.data;
 }
 
 export async function unresolveIssue(issueId: string) {
-  try {
-    const response = await apiClient.patch(`/issues/${issueId}/unresolve/`);
-    return response.data;
-  } catch (err) {
-    console.error("Failed to unresolve issue:", err);
-    throw err;
-  }
+  const response = await apiClient.patch(`/issues/${issueId}/unresolve`);
+  return response.data;
 }
 
 // Mutation hooks for better state management
@@ -251,9 +196,12 @@ export function useCreateFixMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ issueId, fixData }: {
+    mutationFn: ({
+      issueId,
+      fixData,
+    }: {
       issueId: string;
-      fixData: { new_value?: string; comment?: string }
+      fixData: { new_value?: string; comment?: string };
     }) => createFix(issueId, fixData),
     onSuccess: () => {
       // Invalidate and refetch issues queries
@@ -288,6 +236,105 @@ export function useUnresolveIssueMutation() {
       queryClient.invalidateQueries({ queryKey: ["issues"] });
       queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
       queryClient.invalidateQueries({ queryKey: ["issue"] });
+    },
+  });
+}
+
+// Types for dataset version and fix application
+export interface UnappliedFix {
+  fix_id: string;
+  issue_id: string;
+  row_index: number;
+  column_name: string;
+  current_value?: string;
+  new_value?: string;
+  comment?: string;
+  severity: string;
+  fixed_by?: string;
+  fixed_at?: string;
+}
+
+export interface DatasetVersion {
+  id: string;
+  dataset_id: string;
+  version_no: number;
+  created_by: string;
+  created_at: string;
+  rows?: number;
+  columns?: number;
+  change_note?: string;
+  parent_version_id?: string;
+  source?: string;
+  file_path?: string;
+}
+
+export interface ApplyFixesResponse {
+  new_version: DatasetVersion;
+  fixes_applied: number;
+  message: string;
+}
+
+// Fetch unapplied fixes for a dataset version
+export function useUnappliedFixes(versionId: string) {
+  const { isAuthenticated, hasToken } = useAuthenticatedApi();
+
+  return useQuery<UnappliedFix[]>({
+    queryKey: ["unapplied-fixes", versionId],
+    queryFn: async () => {
+      try {
+        const response = await apiClient.get<UnappliedFix[]>(
+          `/processing/datasets/versions/${versionId}/unapplied-fixes`
+        );
+        return response.data || [];
+      } catch {
+        throw new Error("Failed to fetch unapplied fixes");
+      }
+    },
+    enabled: isAuthenticated && hasToken && !!versionId,
+    staleTime: 5000,
+  });
+}
+
+// Apply fixes to create a new dataset version
+export async function applyFixesToDataset(
+  datasetId: string,
+  requestData: {
+    source_version_id: string;
+    fix_ids: string[];
+    version_notes?: string;
+    re_run_rules?: boolean;
+  }
+) {
+  const response = await apiClient.post<ApplyFixesResponse>(
+    `/processing/datasets/${datasetId}/versions/apply-fixes`,
+    requestData
+  );
+  return response.data;
+}
+
+// Mutation hook for applying fixes
+export function useApplyFixesMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      datasetId,
+      requestData,
+    }: {
+      datasetId: string;
+      requestData: {
+        source_version_id: string;
+        fix_ids: string[];
+        version_notes?: string;
+        re_run_rules?: boolean;
+      };
+    }) => applyFixesToDataset(datasetId, requestData),
+    onSuccess: () => {
+      // Invalidate relevant queries
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issues-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      queryClient.invalidateQueries({ queryKey: ["unapplied-fixes"] });
     },
   });
 }

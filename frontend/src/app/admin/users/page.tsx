@@ -64,7 +64,7 @@ import {
   Settings
 } from 'lucide-react'
 import { User, UserRole, UserCreate } from '@/types/api'
-import { format } from 'date-fns'
+import { formatDate } from '@/lib/utils/date'
 
 const roleColors: Record<UserRole, string> = {
   admin: 'bg-red-100 text-red-800',
@@ -510,7 +510,7 @@ export default function AdminUsersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(user.created_at), 'MMM d, yyyy')}
+                        {formatDate(user.created_at)}
                       </TableCell>
                       <TableCell className="text-right">
                         <UserActionsDropdown

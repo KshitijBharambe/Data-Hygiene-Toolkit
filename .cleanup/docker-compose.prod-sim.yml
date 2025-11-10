@@ -1,0 +1,203 @@
+# Production Simulation Environment - Optimized Version
+# This docker-compose file simulates the production stack with performance optimizations
+# - Frontend: Vercel (Next.js standalone build with optimizations)
+# - Backend: Fly.io (with memory/CPU constraints and multi-stage builds)
+# - Database: Supabase (managed via Supabase CLI - run `npx supabase start`)
+
+# NOTE: Start Supabase first with: npx supabase start
+# Then run: make prod-sim or docker-compose -f docker-compose.prod-sim.yml up -d
+
+services:
+  # ============================================================================
+  # BACKEND API - Optimized for Fly.io constraints (256MB RAM)
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      cache_from:
+        - type=registry,ref=your-registry/api:buildcache
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: prodsim-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database connection with connection pooling
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@host.docker.internal:54322/postgres
+      ASYNC_DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:54322/postgres
+
+      # API Settings
+      PORT: 8000
+      PYTHONPATH: /api
+
+      # Memory optimization
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+      PYTHONOPTIMIZE: 2
+      WEB_CONCURRENCY: 1  # Single worker for 256MB
+
+      # Database pooling
+      DB_POOL_SIZE: 2
+      DB_MAX_OVERFLOW: 3
+      DB_POOL_PRE_PING: "true"
+      DB_POOL_RECYCLE: 3600
+
+      # Security
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:54321}
+
+      # Environment
+      ENVIRONMENT: local-prod-sim
+
+    volumes:
+      - api-data:/api/data
+
+    # Fly.io VM constraints (256MB RAM, 1 shared CPU)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 200M  # Slightly lower reservation to prevent OOM
+
+    # Optimized health check
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Logging optimization
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # FRONTEND - Optimized build with caching
+  # ============================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      cache_from:
+        - type=registry,ref=your-registry/frontend:buildcache
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
+    container_name: prodsim-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Runtime environment variables
+      INTERNAL_API_URL: http://api:8000
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-nextauth-secret}
+      NODE_ENV: production
+
+      # Node.js memory optimization
+      NODE_OPTIONS: "--max-old-space-size=768"
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+    # Vercel-like constraints
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 768M
+
+    # Logging optimization
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  api-data:
+    name: prodsim-api-data
+
+# ============================================================================
+# NETWORKS - Custom network for better isolation
+# ============================================================================
+networks:
+  default:
+    name: prodsim-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# NOTES
+# ============================================================================
+#
+# Optimizations Applied:
+#   - Multi-stage Docker builds for smaller images
+#   - Build caching for faster rebuilds
+#   - Memory and CPU constraints matching production
+#   - Optimized health checks with longer intervals
+#   - Logging limits to prevent disk usage issues
+#   - Connection pooling for database
+#   - Python bytecode compilation and optimization
+#   - Non-root user for security
+#
+# Supabase Services (DB, Auth, Storage, Realtime, etc.):
+#   Managed by Supabase CLI. Start with: npx supabase start
+#   Stop with: npx supabase stop
+#   Status: npx supabase status
+#
+# URLs when running:
+#   - API: http://localhost:8000
+#   - Frontend: http://localhost:3000
+#   - Supabase API: http://localhost:54321
+#   - Supabase Studio: http://localhost:54323
+#   - Supabase DB: postgresql://postgres:postgres@localhost:54322/postgres
+#   - Mailpit (emails): http://localhost:54324
+#
+# To run:
+#   1. npx supabase start
+#   2. make prod-sim
+#   Or: docker-compose -f docker-compose.prod-sim.yml up -d
+#
+# To stop:
+#   1. make prod-sim-down
+#   2. npx supabase stop
+#   Or: docker-compose -f docker-compose.prod-sim.yml down
+#
+# To rebuild after changes:
+#   make rebuild
+#   Or: docker-compose -f docker-compose.prod-sim.yml up -d --build
+#
+# For development with hot reload, use:
+#   docker-compose up -d
+#
+# ============================================================================
