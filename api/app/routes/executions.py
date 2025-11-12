@@ -10,7 +10,11 @@ from app.models import (
     User, Execution, ExecutionStatus, DatasetVersion,
     Issue, ExecutionRule, Dataset
 )
-from app.auth import get_any_authenticated_user, get_admin_user
+from app.auth import (
+    get_any_authenticated_user, get_admin_user,
+    get_any_org_member_context, OrgContext
+)
+from app.middleware.organization import OrganizationFilter
 from app.schemas import (
     ExecutionResponse, ExecutionCreate, IssueResponse, QualityMetricsResponse
 )
@@ -30,19 +34,25 @@ async def list_executions(
     dataset_id: Optional[str] = Query(
         None, description="Filter by dataset ID"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    List recent rule executions with optional filtering
+    List recent rule executions within organization with optional filtering.
     """
-    query = db.query(Execution)
+    # Join with DatasetVersion and Dataset to filter by organization
+    query = db.query(Execution).join(
+        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+    ).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        Dataset.organization_id == org_context.organization_id
+    )
 
     if status_filter:
         query = query.filter(Execution.status == status_filter)
 
     if dataset_id:
-        query = query.join(DatasetVersion).filter(
-            DatasetVersion.dataset_id == dataset_id)
+        query = query.filter(Dataset.id == dataset_id)
 
     # Get total count for pagination
     total = query.count()
@@ -76,13 +86,21 @@ async def list_executions(
 async def get_execution(
     execution_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get details of a specific execution
+    Get details of a specific execution within organization.
     """
-    execution = db.query(Execution).filter(
-        Execution.id == execution_id).first()
+    # Filter execution by organization through dataset relationship
+    execution = db.query(Execution).join(
+        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+    ).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        Execution.id == execution_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not execution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -102,18 +120,20 @@ async def get_execution(
 async def create_execution(
     execution_data: ExecutionCreate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Execute rules on a dataset version
+    Execute rules on a dataset version within organization.
     """
     print(f"Creating execution with data: {execution_data}")
-    print(f"User: {current_user.email if current_user else 'None'}")
+    print(f"User: {org_context.user.email}")
 
-    # Force reload
     # Get dataset version - try as version ID first, then as dataset ID
-    dataset_version = db.query(DatasetVersion).filter(
-        DatasetVersion.id == execution_data.dataset_version_id
+    dataset_version = db.query(DatasetVersion).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        DatasetVersion.id == execution_data.dataset_version_id,
+        Dataset.organization_id == org_context.organization_id
     ).first()
 
     print(f"Dataset version lookup result: {dataset_version}")
@@ -123,7 +143,9 @@ async def create_execution(
             f"Dataset version not found, trying as dataset ID: {execution_data.dataset_version_id}")
         # If not found as version ID, try to find the latest version of the dataset
         dataset = db.query(Dataset).filter(
-            Dataset.id == execution_data.dataset_version_id).first()
+            Dataset.id == execution_data.dataset_version_id,
+            Dataset.organization_id == org_context.organization_id
+        ).first()
         print(f"Dataset lookup result: {dataset}")
         if dataset:
             # Get the latest version for this dataset
@@ -139,7 +161,7 @@ async def create_execution(
                     id=str(uuid.uuid4()),
                     dataset_id=dataset.id,
                     version_no=1,
-                    created_by=current_user.id,
+                    created_by=org_context.user_id,
                     created_at=datetime.now(timezone.utc)
                 )
                 db.add(dataset_version)
@@ -164,7 +186,7 @@ async def create_execution(
         execution = rule_service.execute_rules_on_dataset(
             dataset_version=dataset_version,
             rule_ids=execution_data.rule_ids,
-            current_user=current_user
+            current_user=org_context.user
         )
 
         return ExecutionResponse.model_validate(execution)

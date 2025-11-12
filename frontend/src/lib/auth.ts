@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { JWT } from "next-auth/jwt";
 import type { Session, User } from "next-auth";
-import { UserLogin } from "@/types/api";
+import { UserLogin, UserRole } from "@/types/api";
 
 // Import API client dynamically to avoid SSR issues
 const getApiClient = async () => {
@@ -26,6 +26,11 @@ export default NextAuth({
           label: "Password",
           type: "password",
         },
+        organizationId: {
+          label: "Organization ID",
+          type: "text",
+          optional: true,
+        },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
@@ -34,24 +39,50 @@ export default NextAuth({
 
         try {
           const apiClient = await getApiClient();
-          const loginData: UserLogin = {
-            email: credentials.email as string,
-            password: credentials.password as string,
-          };
 
-          const response = await apiClient.login(loginData);
-
-          if (response.access_token && response.user) {
-            // Store the token in the API client
-            apiClient.setToken(response.access_token);
-
-            return {
-              id: response.user.id,
-              email: response.user.email,
-              name: response.user.name,
-              role: response.user.role,
-              accessToken: response.access_token,
+          // If organizationId is provided, use it for login
+          if (credentials.organizationId) {
+            const loginData = {
+              email: credentials.email as string,
+              password: credentials.password as string,
+              organization_id: credentials.organizationId as string,
             };
+
+            const response = await apiClient.loginWithOrg(loginData);
+
+            if (response.access_token) {
+              apiClient.setToken(response.access_token);
+
+              return {
+                id: response.user?.id || '',
+                email: credentials.email as string,
+                name: response.user?.name || '',
+                role: (response.role || 'viewer') as UserRole,
+                organizationId: response.organization?.id,
+                organizationName: response.organization?.name,
+                accessToken: response.access_token,
+              };
+            }
+          } else {
+            // Initial login without org - just verify credentials
+            const loginData: UserLogin = {
+              email: credentials.email as string,
+              password: credentials.password as string,
+            };
+
+            const response = await apiClient.login(loginData);
+
+            if (response.access_token && response.user) {
+              apiClient.setToken(response.access_token);
+
+              return {
+                id: response.user.id,
+                email: response.user.email,
+                name: response.user.name,
+                role: (response.user.role || response.role || 'viewer') as UserRole,
+                accessToken: response.access_token,
+              };
+            }
           }
 
           return null;
@@ -72,11 +103,18 @@ export default NextAuth({
       user,
     }: {
       token: JWT;
-      user?: User & { accessToken?: string; role?: string };
+      user?: User & {
+        accessToken?: string;
+        role?: string;
+        organizationId?: string;
+        organizationName?: string;
+      };
     }) {
       if (user) {
         token.accessToken = user.accessToken;
         token.role = user.role;
+        token.organizationId = user.organizationId;
+        token.organizationName = user.organizationName;
       }
       return token;
     },
@@ -85,6 +123,12 @@ export default NextAuth({
         session.accessToken = token.accessToken;
         if (token.role) {
           session.user.role = token.role;
+        }
+        if (token.organizationId) {
+          session.user.organizationId = token.organizationId;
+        }
+        if (token.organizationName) {
+          session.user.organizationName = token.organizationName;
         }
 
         // Set the token in API client on session creation (client-side only)

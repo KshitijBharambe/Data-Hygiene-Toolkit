@@ -5,7 +5,12 @@ import json
 
 from app.database import get_session
 from app.models import User, Rule, RuleKind, Criticality, Execution, Issue
-from app.auth import get_any_authenticated_user, get_admin_user
+from app.auth import (
+    get_any_authenticated_user, get_admin_user,
+    get_any_org_member_context, get_owner_or_admin_context,
+    OrgContext
+)
+from app.middleware.organization import OrganizationFilter
 from app.schemas import (
     RuleResponse, RuleCreate, RuleUpdate, ExecutionResponse,
     IssueResponse, RuleTestRequest
@@ -29,14 +34,20 @@ async def list_rules(
         True, description="Show only latest versions of rules"),
     rule_kind: Optional[RuleKind] = Query(
         None, description="Filter by rule kind"),
+    include_shared: bool = Query(
+        False, description="Include rules shared with this organization"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    List all business rules with optional filtering.
+    List all business rules within organization with optional filtering.
     By default, shows only latest versions of active rules.
     """
     query = db.query(Rule)
+
+    # Filter by organization
+    query = OrganizationFilter.filter_by_org(
+        query, Rule, org_context, include_shared=include_shared)
 
     # Filter to latest versions only (default behavior)
     if latest_only:
@@ -56,12 +67,16 @@ async def list_rules(
 async def get_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get details of a specific rule
+    Get details of a specific rule within organization.
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    query = db.query(Rule).filter(Rule.id == rule_id)
+    query = OrganizationFilter.filter_by_org(
+        query, Rule, org_context, include_shared=True)
+    rule = query.first()
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -75,11 +90,10 @@ async def get_rule(
 async def create_rule(
     rule_data: RuleCreate,
     db: Session = Depends(get_session),
-    # Only admins can create rules
-    current_user: User = Depends(get_admin_user)
+    org_context: OrgContext = Depends(get_owner_or_admin_context)  # Owner/Admin only
 ):
     """
-    Create a new business rule
+    Create a new business rule within organization (owner/admin only).
     """
     rule_service = RuleEngineService(db)
 
@@ -91,7 +105,8 @@ async def create_rule(
             criticality=rule_data.criticality,
             target_columns=rule_data.target_columns,
             params=rule_data.params,
-            current_user=current_user
+            current_user=org_context.user,
+            organization_id=org_context.organization_id
         )
 
         return RuleResponse.model_validate(rule)
@@ -110,13 +125,16 @@ async def update_rule(
     rule_id: str,
     rule_data: RuleUpdate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)
+    org_context: OrgContext = Depends(get_owner_or_admin_context)
 ):
     """
-    Update an existing rule by creating a new version.
+    Update an existing rule by creating a new version within organization.
     This preserves the complete history of rule changes.
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    query = db.query(Rule).filter(Rule.id == rule_id)
+    query = OrganizationFilter.filter_by_org(query, Rule, org_context)
+    rule = query.first()
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -124,7 +142,7 @@ async def update_rule(
         )
 
     # Always create a new version to preserve history
-    new_version = await create_rule_version(rule, rule_data, current_user, db)
+    new_version = await create_rule_version(rule, rule_data, org_context.user, db)
     return RuleResponse.model_validate(new_version)
 
 
@@ -132,13 +150,16 @@ async def update_rule(
 async def activate_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)
+    org_context: OrgContext = Depends(get_owner_or_admin_context)
 ):
     """
     Activate a rule by creating a new version with is_active=True.
     This preserves the history of activation/deactivation changes.
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    query = db.query(Rule).filter(Rule.id == rule_id)
+    query = OrganizationFilter.filter_by_org(query, Rule, org_context)
+    rule = query.first()
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -151,7 +172,7 @@ async def activate_rule(
 
     # Create new version with is_active=True
     rule_update = RuleUpdate(is_active=True)
-    new_version = await create_rule_version(rule, rule_update, current_user, db)
+    new_version = await create_rule_version(rule, rule_update, org_context.user, db)
 
     return {
         "message": "Rule activated successfully",
@@ -164,13 +185,16 @@ async def activate_rule(
 async def deactivate_rule(
     rule_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_admin_user)
+    org_context: OrgContext = Depends(get_owner_or_admin_context)
 ):
     """
     Deactivate a rule by creating a new version with is_active=False.
     This preserves the history of activation/deactivation changes.
     """
-    rule = db.query(Rule).filter(Rule.id == rule_id).first()
+    query = db.query(Rule).filter(Rule.id == rule_id)
+    query = OrganizationFilter.filter_by_org(query, Rule, org_context)
+    rule = query.first()
+
     if not rule:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -183,7 +207,7 @@ async def deactivate_rule(
 
     # Create new version with is_active=False
     rule_update = RuleUpdate(is_active=False)
-    new_version = await create_rule_version(rule, rule_update, current_user, db)
+    new_version = await create_rule_version(rule, rule_update, org_context.user, db)
 
     return {
         "message": "Rule deactivated successfully",

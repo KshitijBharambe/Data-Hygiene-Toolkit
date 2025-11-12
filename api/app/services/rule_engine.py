@@ -888,24 +888,33 @@ class RuleEngineService:
         criticality: Criticality,
         target_columns: List[str],
         params: Dict[str, Any],
-        current_user: User
+        current_user: User,
+        organization_id: str = None
     ) -> Rule:
-        """Create a new business rule"""
+        """Create a new business rule with organization context"""
 
-        # Check if an active rule with same name already exists (is_latest=True)
+        if not organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="organization_id is required"
+            )
+
+        # Check if an active rule with same name already exists within organization
         # This allows historical versions to keep the same name
         existing_latest_rule = self.db.query(Rule).filter(
             Rule.name == name,
+            Rule.organization_id == organization_id,
             Rule.is_latest == True
         ).first()
 
         if existing_latest_rule:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"An active rule with name '{name}' already exists"
+                detail=f"An active rule with name '{name}' already exists in this organization"
             )
 
         rule = Rule(
+            organization_id=organization_id,
             name=name,
             description=description,
             kind=kind,

@@ -67,12 +67,14 @@ import { User, UserRole, UserCreate } from '@/types/api'
 import { formatDate } from '@/lib/utils/date'
 
 const roleColors: Record<UserRole, string> = {
+  owner: 'bg-purple-100 text-purple-800',
   admin: 'bg-red-100 text-red-800',
   analyst: 'bg-blue-100 text-blue-800',
   viewer: 'bg-green-100 text-green-800'
 }
 
 const roleLabels: Record<UserRole, string> = {
+  owner: 'Owner',
   admin: 'Administrator',
   analyst: 'Data Analyst',
   viewer: 'Viewer'
@@ -159,6 +161,7 @@ function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
                 <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
                 <SelectItem value="analyst">Data Analyst - Can manage data and rules</SelectItem>
                 <SelectItem value="admin">Administrator - Full system access</SelectItem>
+                <SelectItem value="owner">Owner - Complete organization control</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -284,6 +287,7 @@ function UserActionsDropdown({ user, currentUserId }: UserActionsDropdownProps) 
                   <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
                   <SelectItem value="analyst">Data Analyst - Can manage data and rules</SelectItem>
                   <SelectItem value="admin">Administrator - Full system access</SelectItem>
+                  <SelectItem value="owner">Owner - Complete organization control</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -448,6 +452,7 @@ export default function AdminUsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="owner">Owners</SelectItem>
                   <SelectItem value="admin">Administrators</SelectItem>
                   <SelectItem value="analyst">Data Analysts</SelectItem>
                   <SelectItem value="viewer">Viewers</SelectItem>

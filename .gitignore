@@ -1,17 +1,25 @@
-# OS/IDE
+# === OS / Editor / IDE ===
+# macOS
 .DS_Store
+
+# VS Code / JetBrains
 .vscode/
 .idea/
 
-# Python
+# === Python ===
+# bytecode, caches, virtualenvs, env files
 __pycache__/
-*.py[oc]
+*.py[co]
+*.py[oc]   # keep original style (some editors create .pyoc)
 *.egg-info/
 .venv/
 .env
 .env.*
 
-# Node/Next.js
+# pytest config (file)
+pytest.ini
+
+# === Node / Next.js ===
 node_modules/
 .next/
 dist/
@@ -19,39 +27,45 @@ out/
 *.log
 *.tsbuildinfo
 
-# Angular (if ever used)
+# === Angular (if used) ===
 .angular/
 
-# Docker
+# === Docker ===
 .dockerignore
 
-# Build artifacts
+# === Build artifacts ===
 build/
 wheels/
 
-# Misc
+# === Misc / Tools ===
 uv.lock
 
-# Local data and configuration
+# Gemini / Claude / Serena user data
+.gemini-clipboard
+.claude
+.serena
+
+# === Local data, test artifacts, and generated files ===
 63090a6f-b69a-457f-ac79-279f7c5c8fae.json
 cloudflared-config.yml
 test_rules.json
 test.csv
-.claude/
 repomix-output.xml
+
+# project-specific generated / exported data
 api/data/datasets/
 api/create_test_rules.py
-api/test_api.py/
-api/test_rules_api.py/
-pytest.ini/
+api/test_api.py
+api/test_rules_api.py
+
+# tests and test folders (ignore local test artifacts if you intentionally want them out of VCS)
 tests/
 
-# Gemini
-.gemini-clipboard
-
-.claude
-
-.serena
-
+# docs (ignored in original; kept as user had it)
 docs
+.cleanup
 
+# any other local config
+.claude
+.serena
+Backupfiles

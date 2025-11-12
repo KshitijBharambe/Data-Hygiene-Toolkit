@@ -1,5 +1,5 @@
 // User types
-export type UserRole = "admin" | "analyst" | "viewer";
+export type UserRole = "owner" | "admin" | "analyst" | "viewer";
 
 export interface User {
   id: string;
@@ -26,6 +26,59 @@ export interface TokenResponse {
   access_token: string;
   token_type: string;
   user: User;
+  organization?: Organization;
+  role?: UserRole;
+  available_organizations?: Organization[];
+}
+
+// Organization types
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  contact_email: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationCreate {
+  name: string;
+  slug: string;
+  contact_email: string;
+  admin_name: string;
+  admin_email: string;
+  admin_password: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: UserRole;
+  joined_at: string;
+}
+
+export interface OrganizationInvite {
+  id: string;
+  email: string;
+  role: UserRole;
+  status: 'pending' | 'accepted' | 'expired' | 'revoked';
+  created_at: string;
+  expires_at: string;
+}
+
+export interface OrganizationUpdateData {
+  name?: string;
+  contact_email?: string;
+}
+
+export interface SwitchOrganizationResponse {
+  access_token: string;
+  organization_id: string;
+  organization_name: string;
+  role: UserRole;
 }
 
 // Dataset types

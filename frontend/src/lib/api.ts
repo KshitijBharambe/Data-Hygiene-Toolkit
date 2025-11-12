@@ -26,6 +26,12 @@ import {
   Fix,
   FixCreate,
   QualityMetrics,
+  Organization,
+  OrganizationCreate,
+  OrganizationMember,
+  OrganizationInvite,
+  OrganizationUpdateData,
+  SwitchOrganizationResponse,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
@@ -110,6 +116,78 @@ class ApiClient {
   async register(userData: UserCreate): Promise<User> {
     const response = await this.client.post<User>("/auth/register", userData);
     return response.data;
+  }
+
+  async registerOrganization(orgData: OrganizationCreate): Promise<TokenResponse> {
+    const response = await this.client.post<TokenResponse>("/auth/register-organization", orgData);
+    return response.data;
+  }
+
+  async loginWithOrg(credentials: {
+    email: string;
+    password: string;
+    organization_id: string;
+  }): Promise<TokenResponse> {
+    const response = await this.client.post<TokenResponse>("/auth/login", credentials);
+    this.setToken(response.data.access_token);
+    return response.data;
+  }
+
+  async getUserOrganizations(): Promise<Organization[]> {
+    const response = await this.client.get<Organization[]>("/auth/organizations");
+    return response.data;
+  }
+
+  async switchOrganization(organizationId: string): Promise<SwitchOrganizationResponse> {
+    const response = await this.client.post<SwitchOrganizationResponse>("/auth/switch-organization", {
+      organization_id: organizationId,
+    });
+    this.setToken(response.data.access_token);
+    return response.data;
+  }
+
+  async getOrganizationDetails(): Promise<Organization> {
+    const response = await this.client.get<Organization>("/auth/organization/details");
+    return response.data;
+  }
+
+  async updateOrganizationDetails(data: OrganizationUpdateData): Promise<Organization> {
+    const response = await this.client.put<Organization>("/auth/organization/details", data);
+    return response.data;
+  }
+
+  // Team management endpoints
+  async getOrganizationMembers(): Promise<OrganizationMember[]> {
+    const response = await this.client.get<OrganizationMember[]>("/auth/members");
+    return response.data;
+  }
+
+  async inviteMember(email: string, role: UserRole): Promise<OrganizationInvite> {
+    const response = await this.client.post<OrganizationInvite>("/auth/invite-user", {
+      email,
+      role,
+    });
+    return response.data;
+  }
+
+  async getInvitations(): Promise<OrganizationInvite[]> {
+    const response = await this.client.get<OrganizationInvite[]>("/auth/invites");
+    return response.data;
+  }
+
+  async revokeInvitation(inviteId: string): Promise<void> {
+    await this.client.delete(`/auth/invites/${inviteId}`);
+  }
+
+  async updateMemberRole(memberId: string, role: UserRole): Promise<OrganizationMember> {
+    const response = await this.client.put<OrganizationMember>(`/auth/members/${memberId}/role`, {
+      role,
+    });
+    return response.data;
+  }
+
+  async removeMember(memberId: string): Promise<void> {
+    await this.client.delete(`/auth/members/${memberId}`);
   }
 
   async logout(): Promise<void> {

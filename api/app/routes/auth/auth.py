@@ -1,65 +1,155 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+import uuid
+import secrets
 
 from app.database import get_session
-from app.models import User, UserRole
-from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse, UserRoleUpdate
+from app.models import (
+    User, Organization, OrganizationMember, OrganizationInvite,
+    UserRole, InviteStatus
+)
+from app.schemas import (
+    OrganizationCreate, OrganizationResponse, OrganizationTokenResponse,
+    OrganizationLoginRequest, UserResponse, SwitchOrganizationRequest,
+    InviteCreate, InviteResponse, AcceptInvite, OrganizationMemberResponse,
+    MemberRoleUpdate, OrganizationUpdate
+)
 from app.auth import (
     get_password_hash,
     verify_password,
     create_access_token,
     get_current_user,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    get_org_context,
+    get_owner_or_admin_context,
+    get_user_organizations,
+    check_org_membership,
+    OrgContext
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Organization Registration & Login
 
-@router.post("/register", response_model=UserResponse)
-async def register_user(
-    user_data: UserCreate,
+
+@router.post("/register-organization", response_model=OrganizationTokenResponse)
+async def register_organization(
+    org_data: OrganizationCreate,
     db: Session = Depends(get_session)
 ):
-    # Check if user already exists
+    """
+    Register a new organization with an owner account.
+    This creates both the organization and the first owner user.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Validate slug format (alphanumeric and hyphens only)
+    if not org_data.slug.replace('-', '').isalnum():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization slug must contain only alphanumeric characters and hyphens"
+        )
+
+    # Check if organization slug already exists
+    existing_org = db.query(Organization).filter(
+        Organization.slug == org_data.slug
+    ).first()
+    if existing_org:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization slug already taken"
+        )
+
+    # Check if user email already exists
     existing_user = db.query(User).filter(
-        User.email == user_data.email).first()
+        User.email == org_data.admin_email
+    ).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
 
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    new_user = User(
-        name=user_data.name,
-        email=user_data.email,
-        role=user_data.role,
-        auth_provider="local",
-        auth_subject=hashed_password
+    # Create organization
+    new_org = Organization(
+        id=str(uuid.uuid4()),
+        name=org_data.name,
+        slug=org_data.slug,
+        contact_email=org_data.contact_email,
+        is_active=True
     )
+    db.add(new_org)
+    db.flush()  # Get the org ID
 
+    # Create owner user
+    hashed_password = get_password_hash(org_data.admin_password)
+    new_user = User(
+        id=str(uuid.uuid4()),
+        name=org_data.admin_name,
+        email=org_data.admin_email,
+        auth_provider="local",
+        auth_subject=hashed_password,
+        is_active=True
+    )
     db.add(new_user)
+    db.flush()  # Get the user ID
+
+    # Create organization membership (owner role)
+    membership = OrganizationMember(
+        id=str(uuid.uuid4()),
+        organization_id=new_org.id,
+        user_id=new_user.id,
+        role=UserRole.owner,
+        invited_by=None  # First owner is not invited
+    )
+    db.add(membership)
+
     db.commit()
+    db.refresh(new_org)
     db.refresh(new_user)
 
-    return new_user
+    logger.info(f"✅ Created organization {new_org.name} ({new_org.slug}) with owner {new_user.email}")
+
+    # Create access token
+    access_token = create_access_token(
+        user_id=new_user.id,
+        email=new_user.email,
+        organization_id=new_org.id,
+        role=UserRole.owner
+    )
+
+    return OrganizationTokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(new_user),
+        organization=OrganizationResponse.model_validate(new_org),
+        role=UserRole.owner,
+        available_organizations=[OrganizationResponse.model_validate(new_org)]
+    )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=OrganizationTokenResponse)
 async def login_user(
-    credentials: UserLogin,
+    credentials: OrganizationLoginRequest,
     db: Session = Depends(get_session)
 ):
+    """
+    Login with email/password and organization context.
+    If user is in multiple organizations and no organization_id is provided,
+    returns list of available organizations.
+    """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     logger.info(f"🔑 Login attempt for email: {credentials.email}")
-    
+
     # Find user by email
-    user = db.query(User).filter(User.email == credentials.email).first()
+    user = db.query(User).filter(
+        User.email == credentials.email,
+        User.is_active == True
+    ).first()
     if not user:
         logger.warning(f"❌ User not found: {credentials.email}")
         raise HTTPException(
@@ -68,154 +158,496 @@ async def login_user(
         )
 
     logger.info(f"✅ User found: {credentials.email}, verifying password...")
-    
+
     # Verify password
     if not verify_password(credentials.password, user.auth_subject):
         logger.warning(f"❌ Password verification failed for: {credentials.email}")
-        logger.debug(f"   Password length: {len(credentials.password)}, Hash: {user.auth_subject[:30]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
 
     logger.info(f"✅ Password verified for: {credentials.email}")
-    
-    # Create access token (indefinite for demo if ACCESS_TOKEN_EXPIRE_MINUTES is None)
-    access_token_expires = timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES) if ACCESS_TOKEN_EXPIRE_MINUTES else None
-    access_token = create_access_token(
-        data={"sub": user.id, "email": user.email, "role": user.role.value},
-        expires_delta=access_token_expires
+
+    # Get user's organizations
+    user_orgs = get_user_organizations(user.id, db)
+
+    if not user_orgs:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not a member of any organization. Please accept an invite or create an organization."
+        )
+
+    # If user provided organization_id, validate it
+    if credentials.organization_id:
+        selected_org = None
+        selected_role = None
+        for org, role in user_orgs:
+            if org.id == credentials.organization_id:
+                selected_org = org
+                selected_role = role
+                break
+
+        if not selected_org:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is not a member of the specified organization"
+            )
+    else:
+        # Default to first organization
+        selected_org, selected_role = user_orgs[0]
+
+    logger.info(
+        f"✅ User {user.email} logging into org {selected_org.name} with role {selected_role.value}"
     )
 
-    return TokenResponse(
+    # Create access token
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        organization_id=selected_org.id,
+        role=selected_role
+    )
+
+    return OrganizationTokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=UserResponse.model_validate(user)
+        user=UserResponse.model_validate(user),
+        organization=OrganizationResponse.model_validate(selected_org),
+        role=selected_role,
+        available_organizations=[
+            OrganizationResponse.model_validate(org) for org, _ in user_orgs
+        ]
     )
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=dict)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
+    org_context: OrgContext = Depends(get_org_context)
 ):
-    return current_user
-
-
-@router.get("/users", response_model=list[UserResponse])
-async def list_users(
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    # Only admins can list all users
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can list users"
-        )
-
-    users = db.query(User).all()
-    return users
-
-
-@router.put("/users/{user_id}/role")
-async def update_user_role(
-    user_id: str,
-    role_update: UserRoleUpdate,
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    # Only admins can update user roles
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can update user roles"
-        )
-
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    user.role = role_update.role
-    db.commit()
-    db.refresh(user)
-
-    return {"message": "User role updated successfully", "user": UserResponse.model_validate(user)}
-
-
-@router.post("/setup-demo")
-async def setup_demo_account(
-    db: Session = Depends(get_session)
-):
-    """
-    Create a demo admin account if it doesn't exist.
-    This endpoint is idempotent.
-    """
-    demo_email = "admin@datahygiene.com"
-
-    # Check if demo user already exists
-    existing_user = db.query(User).filter(User.email == demo_email).first()
-    if existing_user:
-        return {
-            "message": "Demo admin account already exists",
-            "user": UserResponse.model_validate(existing_user)
-        }
-
-    # Create demo admin account
-    demo_password = "demo123"
-
-    hashed_password = get_password_hash(demo_password)
-    demo_user = User(
-        name="Demo Admin",
-        email=demo_email,
-        role=UserRole.admin,
-        auth_provider="local",
-        auth_subject=hashed_password
-    )
-
-    db.add(demo_user)
-    db.commit()
-    db.refresh(demo_user)
-
+    """Get current user info including organization context."""
     return {
-        "message": "Demo admin account created successfully",
-        "email": demo_email,
-        "password": demo_password,
-        "user": UserResponse.model_validate(demo_user)
+        "user": UserResponse.model_validate(org_context.user),
+        "organization": OrganizationResponse.model_validate(org_context.organization),
+        "role": org_context.role
     }
 
 
-@router.delete("/users/{user_id}")
-async def delete_user(
-    user_id: str,
-    db: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+@router.get("/organizations", response_model=list[OrganizationResponse])
+async def list_user_organizations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
 ):
-    # Only admins can delete users
-    if current_user.role != UserRole.admin:
+    """List all organizations the current user is a member of."""
+    user_orgs = get_user_organizations(current_user.id, db)
+    return [OrganizationResponse.model_validate(org) for org, _ in user_orgs]
+
+
+@router.post("/switch-organization", response_model=OrganizationTokenResponse)
+async def switch_organization(
+    switch_request: SwitchOrganizationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+):
+    """
+    Switch to a different organization (for users who are members of multiple orgs).
+    Returns a new JWT token with the new organization context.
+    """
+    # Check if user is a member of the target organization
+    role = check_org_membership(current_user.id, switch_request.organization_id, db)
+    if not role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can delete users"
+            detail="User is not a member of the specified organization"
         )
 
-    # Cannot delete yourself
-    if current_user.id == user_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account"
-        )
-
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    # Get organization
+    organization = db.query(Organization).filter(
+        Organization.id == switch_request.organization_id,
+        Organization.is_active == True
+    ).first()
+    if not organization:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            detail="Organization not found or inactive"
         )
 
-    db.delete(user)
+    # Create new access token
+    access_token = create_access_token(
+        user_id=current_user.id,
+        email=current_user.email,
+        organization_id=organization.id,
+        role=role
+    )
+
+    # Get all user organizations
+    user_orgs = get_user_organizations(current_user.id, db)
+
+    return OrganizationTokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(current_user),
+        organization=OrganizationResponse.model_validate(organization),
+        role=role,
+        available_organizations=[
+            OrganizationResponse.model_validate(org) for org, _ in user_orgs
+        ]
+    )
+
+
+# Organization Management
+
+@router.get("/organization/details", response_model=OrganizationResponse)
+async def get_organization_details(
+    org_context: OrgContext = Depends(get_org_context)
+):
+    """Get current organization details."""
+    return OrganizationResponse.model_validate(org_context.organization)
+
+
+@router.put("/organization/details", response_model=OrganizationResponse)
+async def update_organization_details(
+    updates: OrganizationUpdate,
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """Update organization details (owner/admin only)."""
+    org = org_context.organization
+
+    if updates.name is not None:
+        org.name = updates.name
+    if updates.contact_email is not None:
+        org.contact_email = updates.contact_email
+
+    org.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(org)
+
+    return OrganizationResponse.model_validate(org)
+
+
+# Team Management (Invites & Members)
+
+@router.post("/invite-user", response_model=InviteResponse)
+async def invite_user_to_organization(
+    invite_data: InviteCreate,
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """
+    Invite a user to join the organization (owner/admin only).
+    Sends an invite token that can be used to accept the invite.
+    """
+    # Check if user already exists and is a member
+    existing_user = db.query(User).filter(User.email == invite_data.email).first()
+    if existing_user:
+        existing_membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == existing_user.id,
+            OrganizationMember.organization_id == org_context.organization_id
+        ).first()
+        if existing_membership:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already a member of this organization"
+            )
+
+    # Check if there's already a pending invite
+    existing_invite = db.query(OrganizationInvite).filter(
+        OrganizationInvite.organization_id == org_context.organization_id,
+        OrganizationInvite.email == invite_data.email,
+        OrganizationInvite.status == InviteStatus.pending
+    ).first()
+    if existing_invite:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="There is already a pending invite for this email"
+        )
+
+    # Create invite
+    invite_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)  # 7 days expiry
+
+    new_invite = OrganizationInvite(
+        id=str(uuid.uuid4()),
+        organization_id=org_context.organization_id,
+        email=invite_data.email,
+        role=invite_data.role,
+        invited_by=org_context.user_id,
+        status=InviteStatus.pending,
+        invite_token=invite_token,
+        expires_at=expires_at
+    )
+    db.add(new_invite)
+    db.commit()
+    db.refresh(new_invite)
+
+    # TODO: Send email with invite token
+    # For now, return the token in the response
+
+    return InviteResponse.model_validate(new_invite)
+
+
+@router.post("/accept-invite", response_model=OrganizationTokenResponse)
+async def accept_organization_invite(
+    accept_data: AcceptInvite,
+    db: Session = Depends(get_session)
+):
+    """
+    Accept an organization invite using the invite token.
+    If user doesn't exist, creates a new user account.
+    """
+    # Find invite
+    invite = db.query(OrganizationInvite).filter(
+        OrganizationInvite.invite_token == accept_data.invite_token
+    ).first()
+
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid invite token"
+        )
+
+    # Check invite status
+    if invite.status != InviteStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invite has already been {invite.status.value}"
+        )
+
+    # Check expiration
+    if datetime.now(timezone.utc) > invite.expires_at:
+        invite.status = InviteStatus.expired
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invite has expired"
+        )
+
+    # Get organization
+    organization = db.query(Organization).filter(
+        Organization.id == invite.organization_id
+    ).first()
+    if not organization or not organization.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found or inactive"
+        )
+
+    # Check if user exists
+    user = db.query(User).filter(User.email == invite.email).first()
+    if user:
+        # Existing user accepting invite
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is inactive"
+            )
+    else:
+        # Create new user
+        hashed_password = get_password_hash(accept_data.password)
+        user = User(
+            id=str(uuid.uuid4()),
+            name=accept_data.name,
+            email=invite.email,
+            auth_provider="local",
+            auth_subject=hashed_password,
+            is_active=True
+        )
+        db.add(user)
+        db.flush()
+
+    # Create membership
+    membership = OrganizationMember(
+        id=str(uuid.uuid4()),
+        organization_id=organization.id,
+        user_id=user.id,
+        role=invite.role,
+        invited_by=invite.invited_by
+    )
+    db.add(membership)
+
+    # Update invite status
+    invite.status = InviteStatus.accepted
+    invite.accepted_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(user)
+
+    # Create access token
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        organization_id=organization.id,
+        role=invite.role
+    )
+
+    # Get all user organizations
+    user_orgs = get_user_organizations(user.id, db)
+
+    return OrganizationTokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+        organization=OrganizationResponse.model_validate(organization),
+        role=invite.role,
+        available_organizations=[
+            OrganizationResponse.model_validate(org) for org, _ in user_orgs
+        ]
+    )
+
+
+@router.get("/invites", response_model=list[InviteResponse])
+async def list_organization_invites(
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """List all invites for the current organization (owner/admin only)."""
+    invites = db.query(OrganizationInvite).filter(
+        OrganizationInvite.organization_id == org_context.organization_id
+    ).order_by(OrganizationInvite.created_at.desc()).all()
+
+    return [InviteResponse.model_validate(invite) for invite in invites]
+
+
+@router.delete("/invites/{invite_id}")
+async def revoke_invite(
+    invite_id: str,
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """Revoke a pending invite (owner/admin only)."""
+    invite = db.query(OrganizationInvite).filter(
+        OrganizationInvite.id == invite_id,
+        OrganizationInvite.organization_id == org_context.organization_id
+    ).first()
+
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invite not found"
+        )
+
+    if invite.status != InviteStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Can only revoke pending invites"
+        )
+
+    invite.status = InviteStatus.revoked
     db.commit()
 
-    return {"message": "User deleted successfully"}
+    return {"message": "Invite revoked successfully"}
+
+
+@router.get("/members", response_model=list[OrganizationMemberResponse])
+async def list_organization_members(
+    org_context: OrgContext = Depends(get_org_context),
+    db: Session = Depends(get_session)
+):
+    """List all members of the current organization."""
+    members = db.query(OrganizationMember, User).join(
+        User, OrganizationMember.user_id == User.id
+    ).filter(
+        OrganizationMember.organization_id == org_context.organization_id
+    ).all()
+
+    return [
+        OrganizationMemberResponse(
+            id=member.id,
+            organization_id=member.organization_id,
+            user_id=member.user_id,
+            role=member.role,
+            user_name=user.name,
+            user_email=user.email,
+            joined_at=member.joined_at
+        )
+        for member, user in members
+    ]
+
+
+@router.put("/members/{member_id}/role", response_model=OrganizationMemberResponse)
+async def update_member_role(
+    member_id: str,
+    role_update: MemberRoleUpdate,
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """Update a member's role (owner/admin only)."""
+    member = db.query(OrganizationMember).filter(
+        OrganizationMember.id == member_id,
+        OrganizationMember.organization_id == org_context.organization_id
+    ).first()
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found"
+        )
+
+    # Cannot change your own role
+    if member.user_id == org_context.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role"
+        )
+
+    member.role = role_update.role
+    member.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(member)
+
+    # Get user info
+    user = db.query(User).filter(User.id == member.user_id).first()
+
+    return OrganizationMemberResponse(
+        id=member.id,
+        organization_id=member.organization_id,
+        user_id=member.user_id,
+        role=member.role,
+        user_name=user.name,
+        user_email=user.email,
+        joined_at=member.joined_at
+    )
+
+
+@router.delete("/members/{member_id}")
+async def remove_member(
+    member_id: str,
+    org_context: OrgContext = Depends(get_owner_or_admin_context),
+    db: Session = Depends(get_session)
+):
+    """Remove a member from the organization (owner/admin only)."""
+    member = db.query(OrganizationMember).filter(
+        OrganizationMember.id == member_id,
+        OrganizationMember.organization_id == org_context.organization_id
+    ).first()
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found"
+        )
+
+    # Cannot remove yourself
+    if member.user_id == org_context.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove yourself. Transfer ownership first."
+        )
+
+    # Check if this is the last owner
+    if member.role == UserRole.owner:
+        owner_count = db.query(OrganizationMember).filter(
+            OrganizationMember.organization_id == org_context.organization_id,
+            OrganizationMember.role == UserRole.owner
+        ).count()
+        if owner_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot remove the last owner. Promote another member to owner first."
+            )
+
+    db.delete(member)
+    db.commit()
+
+    return {"message": "Member removed successfully"}

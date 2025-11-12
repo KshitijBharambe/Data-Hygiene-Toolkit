@@ -7,7 +7,12 @@ from app.database import get_session
 from app.models import (
     User, Dataset, DatasetVersion, DatasetStatus, Issue, Fix, Execution
 )
-from app.auth import get_any_authenticated_user, get_admin_user
+from app.auth import (
+    get_any_authenticated_user, get_admin_user,
+    get_any_org_member_context, get_owner_or_admin_context,
+    OrgContext
+)
+from app.middleware.organization import OrganizationFilter
 from app.schemas import (
     DatasetResponse, FixCreate, FixResponse, IssueResponse,
     ApplyFixesRequest, ApplyFixesResponse, UnappliedFixResponse,
@@ -30,10 +35,10 @@ async def validate_dataset(
     validation_rules: Optional[Dict[str, Dict[str, Any]]] = Body(
         None, description="Value validation rules"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Validate and clean a dataset using data quality algorithms
+    Validate and clean a dataset using data quality algorithms within organization
 
     Args:
         dataset_id: ID of dataset to process
@@ -44,20 +49,16 @@ async def validate_dataset(
     Returns:
         Processing results and new dataset version information
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found"
-        )
-
-    # Check permissions (user must be uploader, admin, or analyst)
-    if (current_user.role.value not in ["admin", "analyst"] and
-            dataset.uploaded_by != current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to process this dataset"
         )
 
     try:
@@ -169,13 +170,17 @@ async def compare_dataset_versions(
     version1: int = Query(..., description="First version number to compare"),
     version2: int = Query(..., description="Second version number to compare"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Compare two versions of a dataset to show differences
+    Compare two versions of a dataset to show differences within organization
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -243,11 +248,23 @@ async def compare_dataset_versions(
 async def get_quality_summary(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get comprehensive data quality summary for a dataset
+    Get comprehensive data quality summary for a dataset within organization
     """
+    # Verify dataset belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
     try:
         data_quality_service = DataQualityService(db)
         summary = data_quality_service.create_data_quality_summary(dataset_id)
@@ -265,13 +282,21 @@ async def create_fix(
     issue_id: str,
     fix_data: FixCreate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Create a fix for a specific data quality issue
+    Create a fix for a specific data quality issue within organization
     """
-    # Check if issue exists
-    issue = db.query(Issue).filter(Issue.id == issue_id).first()
+    # Check if issue exists and belongs to organization
+    issue = db.query(Issue).join(Execution).join(
+        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+    ).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        Issue.id == issue_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not issue:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -281,7 +306,7 @@ async def create_fix(
     # Create fix record
     fix = Fix(
         issue_id=issue_id,
-        fixed_by=current_user.id,
+        fixed_by=org_context.user_id,
         new_value=fix_data.new_value,
         comment=fix_data.comment
     )
@@ -297,11 +322,27 @@ async def create_fix(
 async def get_issue_fixes(
     issue_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get all fixes applied to a specific issue
+    Get all fixes applied to a specific issue within organization
     """
+    # Verify issue belongs to organization
+    issue = db.query(Issue).join(Execution).join(
+        DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+    ).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        Issue.id == issue_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
+    if not issue:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Issue not found"
+        )
+
     fixes = db.query(Fix).filter(Fix.issue_id == issue_id).all()
     return [FixResponse.model_validate(fix) for fix in fixes]
 
@@ -312,10 +353,10 @@ async def apply_corrections(
     corrections: List[Dict[str, Any]
                       ] = Body(..., description="List of corrections to apply"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Apply manual corrections to dataset data
+    Apply manual corrections to dataset data within organization
 
     Args:
         dataset_id: Dataset to correct
@@ -325,25 +366,22 @@ async def apply_corrections(
                     - new_value: New value to set
                     - issue_id: (optional) Related issue ID
     """
-    # Check if dataset exists and user has permissions
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found"
         )
 
-    if (current_user.role.value not in ["admin", "analyst"] and
-            dataset.uploaded_by != current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to modify this dataset"
-        )
-
     try:
         data_quality_service = DataQualityService(db)
         result = data_quality_service.apply_corrections(
-            dataset_id, corrections, current_user.id
+            dataset_id, corrections, org_context.user_id
         )
 
         # Update dataset status if corrections were applied
@@ -365,13 +403,17 @@ async def apply_corrections(
 async def get_processing_history(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get the processing history for a dataset including all versions and changes
+    Get the processing history for a dataset including all versions and changes within organization
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -473,10 +515,10 @@ async def apply_bulk_corrections(
     correction_rules: Dict[str, Dict[str, Any]
                            ] = Body(..., description="Bulk correction rules by column"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Apply bulk corrections using automated rules
+    Apply bulk corrections using automated rules within organization
 
     Args:
         dataset_id: Dataset to correct
@@ -487,19 +529,16 @@ async def apply_bulk_corrections(
                              "missing_data": {"strategy": "median"}
                          }
     """
-    # Check permissions
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found"
-        )
-
-    if (current_user.role.value not in ["admin", "analyst"] and
-            dataset.uploaded_by != current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to modify this dataset"
         )
 
     try:
@@ -609,10 +648,10 @@ async def apply_fixes_to_create_version(
     dataset_id: str,
     request: ApplyFixesRequest,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Apply selected fixes to a dataset version and create a new version
+    Apply selected fixes to a dataset version and create a new version within organization
 
     This endpoint allows you to:
     1. Select specific fixes to apply
@@ -631,20 +670,16 @@ async def apply_fixes_to_create_version(
     Returns:
         ApplyFixesResponse with new version details and count of fixes applied
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found"
-        )
-
-    # Check permissions (user must be uploader, admin, or analyst)
-    if (current_user.role.value not in ["admin", "analyst"] and
-            dataset.uploaded_by != current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to modify this dataset"
         )
 
     # Validate that we have fixes to apply
@@ -662,7 +697,7 @@ async def apply_fixes_to_create_version(
             dataset_id=dataset_id,
             source_version_id=request.source_version_id,
             fix_ids=request.fix_ids,
-            user_id=current_user.id,
+            user_id=org_context.user_id,
             version_notes=request.version_notes,
             re_run_rules=request.re_run_rules
         )
@@ -699,10 +734,10 @@ async def apply_fixes_to_create_version(
 async def get_unapplied_fixes_for_version(
     version_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get all unapplied fixes for issues detected in a specific dataset version
+    Get all unapplied fixes for issues detected in a specific dataset version within organization
 
     Returns fixes that have been proposed but not yet applied to create a new version.
     These are candidates for the next version creation.
@@ -713,9 +748,14 @@ async def get_unapplied_fixes_for_version(
     Returns:
         List of unapplied fixes with their details
     """
-    # Check if version exists
-    version = db.query(DatasetVersion).filter(
-        DatasetVersion.id == version_id).first()
+    # Check if version exists and belongs to organization
+    version = db.query(DatasetVersion).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        DatasetVersion.id == version_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -739,10 +779,10 @@ async def get_unapplied_fixes_for_version(
 async def get_version_lineage(
     version_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get the version lineage (parent chain) for a dataset version
+    Get the version lineage (parent chain) for a dataset version within organization
 
     Returns the full history from the current version back to the original upload,
     showing how the dataset evolved through various transformations and fix applications.
@@ -753,9 +793,14 @@ async def get_version_lineage(
     Returns:
         List of versions in the lineage chain, from current to original
     """
-    # Check if version exists
-    version = db.query(DatasetVersion).filter(
-        DatasetVersion.id == version_id).first()
+    # Check if version exists and belongs to organization
+    version = db.query(DatasetVersion).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        DatasetVersion.id == version_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -778,10 +823,10 @@ async def get_version_lineage(
 async def get_fixes_applied_in_version(
     version_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get all fixes that were applied to create a specific dataset version
+    Get all fixes that were applied to create a specific dataset version within organization
 
     Shows exactly which fixes were applied when this version was created,
     including the old and new values for each fix.
@@ -792,9 +837,14 @@ async def get_fixes_applied_in_version(
     Returns:
         List of fixes that were applied in this version
     """
-    # Check if version exists
-    version = db.query(DatasetVersion).filter(
-        DatasetVersion.id == version_id).first()
+    # Check if version exists and belongs to organization
+    version = db.query(DatasetVersion).join(
+        Dataset, DatasetVersion.dataset_id == Dataset.id
+    ).filter(
+        DatasetVersion.id == version_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

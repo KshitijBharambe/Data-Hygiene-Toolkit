@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 
 class UserRole(enum.Enum):
+    owner = "owner"  # Organization owner
     admin = "admin"
     analyst = "analyst"
     viewer = "viewer"
@@ -76,7 +77,138 @@ class VersionSource(enum.Enum):
     manual_edit = "manual_edit"  # Manual modifications
     transformation = "transformation"  # Other transformations
 
+
+class SharePermission(enum.Enum):
+    view = "view"  # Can view the resource
+    use = "use"  # Can use/execute the resource
+    clone = "clone"  # Can clone to own organization
+
+
+class InviteStatus(enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    expired = "expired"
+    revoked = "revoked"
+
 # Models
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    name = Column(String, nullable=False)
+    slug = Column(String, unique=True, nullable=False, index=True)
+    contact_email = Column(String, nullable=False)
+    settings = Column(Text)  # JSON for org-specific settings
+    is_active = Column(Boolean, default=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    members = relationship("OrganizationMember", back_populates="organization")
+    invites = relationship("OrganizationInvite", back_populates="organization")
+    datasets = relationship("Dataset", back_populates="organization")
+    rules = relationship("Rule", back_populates="organization")
+    shared_resources = relationship(
+        "ResourceShare", foreign_keys="ResourceShare.owner_org_id", back_populates="owner_org")
+    received_shares = relationship(
+        "ResourceShare", foreign_keys="ResourceShare.shared_with_org_id", back_populates="shared_with_org")
+    audit_logs = relationship("AuditLog", back_populates="organization")
+
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey(
+        "users.id", ondelete="CASCADE"), nullable=False)
+    role = Column(ENUM(UserRole), nullable=False)
+    invited_by = Column(String, ForeignKey("users.id"), nullable=True)
+    joined_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    organization = relationship("Organization", back_populates="members")
+    user = relationship("User", foreign_keys=[
+                        user_id], back_populates="memberships")
+    inviter = relationship("User", foreign_keys=[invited_by])
+
+
+class OrganizationInvite(Base):
+    __tablename__ = "organization_invites"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False)
+    email = Column(String, nullable=False, index=True)
+    role = Column(ENUM(UserRole), nullable=False)
+    invited_by = Column(String, ForeignKey("users.id"), nullable=False)
+    status = Column(ENUM(InviteStatus), default=InviteStatus.pending)
+    invite_token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    accepted_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    # Relationships
+    organization = relationship("Organization", back_populates="invites")
+    inviter = relationship("User")
+
+
+class ResourceShare(Base):
+    __tablename__ = "resource_shares"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    resource_type = Column(String, nullable=False)  # 'rule', 'template', etc.
+    resource_id = Column(String, nullable=False, index=True)
+    owner_org_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False)
+    shared_with_org_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False)
+    permission = Column(ENUM(SharePermission), nullable=False)
+    shared_by = Column(String, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    revoked_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    revoked_by = Column(String, ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    owner_org = relationship("Organization", foreign_keys=[
+                             owner_org_id], back_populates="shared_resources")
+    shared_with_org = relationship("Organization", foreign_keys=[
+                                   shared_with_org_id], back_populates="received_shares")
+    sharer = relationship("User", foreign_keys=[shared_by])
+    revoker = relationship("User", foreign_keys=[revoked_by])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True,
+                default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    action = Column(String, nullable=False, index=True)
+    resource_type = Column(String, nullable=True)
+    resource_id = Column(String, nullable=True)
+    details = Column(Text)  # JSON with additional details (renamed from metadata)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True),
+                        server_default=func.now(), index=True)
+
+    # Relationships
+    organization = relationship("Organization", back_populates="audit_logs")
+    user = relationship("User")
 
 
 class User(Base):
@@ -85,15 +217,17 @@ class User(Base):
     id = Column(String, primary_key=True,
                 default=lambda: str(uuid.uuid4()), index=True)
     name = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
-    role = Column(ENUM(UserRole), nullable=False)
-    auth_provider = Column(String)
-    auth_subject = Column(String)
+    email = Column(String, unique=True, nullable=False, index=True)
+    auth_provider = Column(String, default="local")
+    auth_subject = Column(String)  # hashed password for local, external ID for OAuth
+    is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True),
                         server_default=func.now(), onupdate=func.now())
 
     # Relationships
+    memberships = relationship(
+        "OrganizationMember", foreign_keys="OrganizationMember.user_id", back_populates="user")
     uploaded_datasets = relationship("Dataset", back_populates="uploader")
     created_rules = relationship("Rule", back_populates="creator")
     started_executions = relationship("Execution", back_populates="starter")
@@ -106,6 +240,8 @@ class Dataset(Base):
 
     id = Column(String, primary_key=True,
                 default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     source_type = Column(ENUM(SourceType), nullable=False)
     original_filename = Column(String)
@@ -118,6 +254,7 @@ class Dataset(Base):
     notes = Column(Text)
 
     # Relationships
+    organization = relationship("Organization", back_populates="datasets")
     uploader = relationship("User", back_populates="uploaded_datasets")
     versions = relationship("DatasetVersion", back_populates="dataset")
     columns = relationship("DatasetColumn", back_populates="dataset")
@@ -175,6 +312,8 @@ class Rule(Base):
 
     id = Column(String, primary_key=True,
                 default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(String, ForeignKey(
+        "organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     # Removed unique constraint for versioning
     name = Column(String, nullable=False, index=True)
     description = Column(Text)
@@ -208,6 +347,7 @@ class Rule(Base):
     dependency_group = Column(String, nullable=True)  # Group for related rules
 
     # Relationships
+    organization = relationship("Organization", back_populates="rules")
     creator = relationship("User", back_populates="created_rules")
     rule_columns = relationship("RuleColumn", back_populates="rule")
     execution_rules = relationship("ExecutionRule", back_populates="rule")

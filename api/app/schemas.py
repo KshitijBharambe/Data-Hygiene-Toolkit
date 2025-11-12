@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from app.models import (
     UserRole, SourceType, DatasetStatus, Criticality, RuleKind,
-    ExecutionStatus, ExportFormat
+    ExecutionStatus, ExportFormat, SharePermission, InviteStatus
 )
 
 # Base schemas
@@ -18,7 +18,6 @@ class BaseSchema(BaseModel):
 class UserBase(BaseModel):
     name: str
     email: EmailStr
-    role: UserRole
 
 
 class UserCreate(UserBase):
@@ -32,6 +31,7 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     id: str
+    is_active: bool
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
@@ -45,6 +45,123 @@ class TokenResponse(BaseModel):
 
 class UserRoleUpdate(BaseModel):
     role: UserRole
+
+
+# Organization schemas
+
+class OrganizationBase(BaseModel):
+    name: str
+    contact_email: EmailStr
+
+
+class OrganizationCreate(OrganizationBase):
+    slug: str
+    admin_name: str
+    admin_email: EmailStr
+    admin_password: str
+
+
+class OrganizationResponse(OrganizationBase):
+    id: str
+    slug: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+
+
+# Organization Member schemas
+
+class OrganizationMemberResponse(BaseModel):
+    id: str
+    organization_id: str
+    user_id: str
+    role: UserRole
+    user_name: str
+    user_email: EmailStr
+    joined_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MemberRoleUpdate(BaseModel):
+    role: UserRole
+
+
+# Organization Invite schemas
+
+class InviteCreate(BaseModel):
+    email: EmailStr
+    role: UserRole
+
+
+class InviteResponse(BaseModel):
+    id: str
+    organization_id: str
+    email: EmailStr
+    role: UserRole
+    status: InviteStatus
+    invite_token: str
+    expires_at: datetime
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AcceptInvite(BaseModel):
+    invite_token: str
+    name: str
+    password: str
+
+
+# Login & Registration schemas (organization-aware)
+
+class OrganizationLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    organization_id: Optional[str] = None  # If user is in multiple orgs
+
+
+class OrganizationTokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+    organization: OrganizationResponse
+    role: UserRole
+    available_organizations: List[OrganizationResponse] = []
+
+
+class SwitchOrganizationRequest(BaseModel):
+    organization_id: str
+
+
+# Resource Sharing schemas
+
+class ResourceShareCreate(BaseModel):
+    resource_type: str  # 'rule', 'template', etc.
+    resource_id: str
+    shared_with_org_id: str
+    permission: SharePermission
+    expires_at: Optional[datetime] = None
+
+
+class ResourceShareResponse(BaseModel):
+    id: str
+    resource_type: str
+    resource_id: str
+    owner_org_id: str
+    owner_org_name: str
+    shared_with_org_id: str
+    shared_with_org_name: str
+    permission: SharePermission
+    expires_at: Optional[datetime]
+    created_at: datetime
+    revoked_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
 
 # Dataset schemas
 
