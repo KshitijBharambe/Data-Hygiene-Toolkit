@@ -160,6 +160,25 @@ function getNavigationItems(
       ],
     },
     {
+      title: "Organization",
+      icon: Users,
+      roles: ["owner", "admin"],
+      children: [
+        {
+          title: "Team Management",
+          href: "/dashboard/team",
+          icon: Users,
+          roles: ["owner", "admin"],
+        },
+        {
+          title: "Settings",
+          href: "/dashboard/settings",
+          icon: Settings,
+          roles: ["owner", "admin"],
+        },
+      ],
+    },
+    {
       title: "Administration",
       icon: Settings,
       roles: ["admin"],

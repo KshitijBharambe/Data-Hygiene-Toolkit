@@ -7,10 +7,11 @@ import mimetypes
 
 from app.database import get_session
 from app.models import User, Dataset, DatasetColumn
-from app.auth import get_any_authenticated_user
+from app.auth import get_any_authenticated_user, get_any_org_member_context, OrgContext
 from app.schemas import DatasetResponse, DataProfileResponse, DatasetColumnResponse
 from app.services.data_import import DataImportService
 from app.utils import sanitize_input, validate_identifier
+from app.middleware.organization import OrganizationFilter
 
 router = APIRouter(prefix="/data", tags=["Data Import"])
 
@@ -71,10 +72,10 @@ async def upload_file(
     dataset_name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Upload and process a CSV or Excel file
+    Upload and process a CSV or Excel file within organization context.
     """
     if dataset_name:
         dataset_name = sanitize_input(dataset_name)
@@ -105,9 +106,9 @@ async def upload_file(
     sanitized_filename = sanitize_filename(file.filename)
     file.filename = sanitized_filename
 
-    # Process the file
+    # Process the file with organization context
     import_service = DataImportService(db)
-    result = await import_service.import_file(file, current_user, dataset_name)
+    result = await import_service.import_file(file, org_context.user, dataset_name, org_context.organization_id)
 
     return {
         "message": "File uploaded and processed successfully",
@@ -122,10 +123,10 @@ async def upload_json_data(
     data: List[Dict[str, Any]],
     description: Optional[str] = None,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Upload JSON data directly
+    Upload JSON data directly within organization context.
     """
     dataset_name = sanitize_input(dataset_name)
     data = sanitize_input(data)
@@ -143,9 +144,9 @@ async def upload_json_data(
             detail="JSON data exceeds 100,000 records limit"
         )
 
-    # Process the JSON data
+    # Process the JSON data with organization context
     import_service = DataImportService(db)
-    result = import_service.import_json_data(data, current_user, dataset_name)
+    result = import_service.import_json_data(data, org_context.user, dataset_name, org_context.organization_id)
 
     return {
         "message": "JSON data processed successfully",
@@ -157,12 +158,14 @@ async def upload_json_data(
 @router.get("/datasets", response_model=List[DatasetResponse])
 async def list_datasets(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    List all datasets accessible to the current user
+    List all datasets accessible to the current organization.
     """
-    datasets = db.query(Dataset).all()
+    query = db.query(Dataset)
+    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    datasets = query.all()
     return [DatasetResponse.model_validate(dataset) for dataset in datasets]
 
 
@@ -170,13 +173,17 @@ async def list_datasets(
 async def get_dataset(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get details of a specific dataset
+    Get details of a specific dataset within organization.
     """
     dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+    query = db.query(Dataset).filter(Dataset.id == dataset_id)
+    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    dataset = query.first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -190,13 +197,16 @@ async def get_dataset(
 async def delete_dataset(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Delete a dataset (only by owner or admin)
+    Delete a dataset within organization (owner/admin only).
     """
     dataset_id = _sanitize_identifier(dataset_id, "dataset_id")
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+
+    query = db.query(Dataset).filter(Dataset.id == dataset_id)
+    query = OrganizationFilter.filter_by_org(query, Dataset, org_context, include_shared=False)
+    dataset = query.first()
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -20,6 +20,7 @@ import { useDashboardOverview } from '@/lib/hooks/useDashboard'
 import { useSearch } from '@/lib/hooks/useSearch'
 import { Card } from '@/components/ui/card'
 import Link from 'next/link'
+import { OrganizationSwitcher } from '@/components/organization-switcher'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -328,6 +329,11 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Right section */}
         <div className="flex items-center space-x-4 flex-1 justify-end">
+          {/* Organization Switcher */}
+          {session?.user && (
+            <OrganizationSwitcher />
+          )}
+
           {/* Theme toggle */}
           {mounted && (
             <Button

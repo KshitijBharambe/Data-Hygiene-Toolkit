@@ -8,7 +8,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import apiClient from '@/lib/api'
+
+interface Organization {
+  id: string
+  name: string
+  slug: string
+  role: string
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -16,10 +25,52 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [selectedOrg, setSelectedOrg] = useState<string>('')
+  const [showOrgSelection, setShowOrgSelection] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleInitialLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
+    setError('')
+
+    try {
+      // First, get user's organizations
+      const loginResponse = await apiClient.login({ email, password })
+
+      // Get user's organizations
+      const orgsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/organizations`, {
+        headers: {
+          'Authorization': `Bearer ${loginResponse.access_token}`
+        }
+      })
+
+      const orgsData = await orgsResponse.json()
+
+      if (orgsData.length === 0) {
+        setError('No organizations found for this user')
+        setIsLoading(false)
+        return
+      }
+
+      if (orgsData.length === 1) {
+        // Single org - proceed with login
+        await handleOrgLogin(orgsData[0].id)
+      } else {
+        // Multiple orgs - show selection
+        setOrganizations(orgsData)
+        setShowOrgSelection(true)
+        setIsLoading(false)
+      }
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } }
+      setError(error.response?.data?.detail || 'Invalid email or password')
+      setIsLoading(false)
+    }
+  }
+
+  const handleOrgLogin = async (orgId: string) => {
     setIsLoading(true)
     setError('')
 
@@ -27,14 +78,14 @@ export default function LoginPage() {
       const result = await signIn('credentials', {
         email,
         password,
+        organizationId: orgId,
         redirect: false,
         callbackUrl: '/dashboard',
       })
 
       if (result?.error) {
-        setError('Invalid email or password')
+        setError('Login failed. Please try again.')
       } else {
-        // Check if sign in was successful
         const session = await getSession()
         if (session) {
           router.push('/dashboard')
@@ -46,6 +97,19 @@ export default function LoginPage() {
       setIsLoading(false)
     }
   }
+
+  const handleOrgSelection = async () => {
+    if (!selectedOrg) {
+      setError('Please select an organization')
+      return
+    }
+    await handleOrgLogin(selectedOrg)
+  }
+
+  const handleSubmit = showOrgSelection ? (e: React.FormEvent) => {
+    e.preventDefault()
+    handleOrgSelection()
+  } : handleInitialLogin
 
   const handleSetupDemo = async () => {
     setIsLoading(true)
@@ -124,6 +188,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 px-4">
       <div className="w-full max-w-md space-y-8">
+        {/* Back to Landing Page */}
+        <div className="flex justify-start">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/')}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Home
+          </Button>
+        </div>
+
         {/* Logo and header */}
         <div className="text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-primary flex items-center justify-center mb-4">
@@ -137,7 +213,9 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle>Welcome back</CardTitle>
             <CardDescription>
-              Enter your credentials to access your dashboard
+              {showOrgSelection
+                ? 'Select your organization to continue'
+                : 'Enter your credentials to access your dashboard'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -148,94 +226,141 @@ export default function LoginPage() {
                 </Alert>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
+              {!showOrgSelection ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Sign In
                   </Button>
-                </div>
-              </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="organization">Select Organization</Label>
+                    <Select value={selectedOrg} onValueChange={setSelectedOrg}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose an organization" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((org) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{org.name}</span>
+                              <span className="text-xs text-muted-foreground">{org.role}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign In
-              </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowOrgSelection(false)
+                        setOrganizations([])
+                        setSelectedOrg('')
+                      }}
+                      disabled={isLoading}
+                    >
+                      Back
+                    </Button>
+                    <Button type="submit" className="flex-1" disabled={isLoading}>
+                      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Continue
+                    </Button>
+                  </div>
+                </>
+              )}
             </form>
 
-            <div className="mt-6 space-y-3">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
+            {!showOrgSelection && (
+              <div className="mt-6 space-y-3">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Quick Actions
+                    </span>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">
-                    Quick Actions
-                  </span>
-                </div>
+
+                <Button
+                  type="button"
+                  variant="default"
+                  className="w-full"
+                  onClick={handleSetupDemo}
+                  disabled={isLoading}
+                >
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Setup Demo Account
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleDemoLogin}
+                  disabled={isLoading}
+                >
+                  Demo Login (If Already Created)
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => router.push('/auth/register')}
+                  disabled={isLoading}
+                >
+                  Create Organization Account
+                </Button>
               </div>
-
-              <Button
-                type="button"
-                variant="default"
-                className="w-full"
-                onClick={handleSetupDemo}
-                disabled={isLoading}
-              >
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Setup Demo Account
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleDemoLogin}
-                disabled={isLoading}
-              >
-                Demo Login (If Already Created)
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => router.push('/auth/register')}
-                disabled={isLoading}
-              >
-                Create Admin Account
-              </Button>
-            </div>
+            )}
           </CardContent>
         </Card>
 

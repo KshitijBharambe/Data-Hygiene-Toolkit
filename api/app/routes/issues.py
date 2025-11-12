@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 from app.database import get_session
 from app.models import Issue, Fix, Rule, Execution, Dataset, DatasetVersion, User, Criticality
-from app.auth import get_any_authenticated_user, get_admin_user
+from app.auth import get_any_authenticated_user, get_admin_user, get_any_org_member_context, OrgContext
+from app.middleware.organization import OrganizationFilter
 from app.schemas import IssueResponse, FixCreate, FixResponse
 
 router = APIRouter(prefix="/issues", tags=["Issues & Fixes"])
@@ -25,10 +26,10 @@ async def get_issues(
     limit: int = Query(50, description="Number of issues to return"),
     offset: int = Query(0, description="Number of issues to skip"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get list of data quality issues with optional filtering
+    Get list of data quality issues within organization with optional filtering
     """
     try:
         query = db.query(Issue).options(
@@ -36,6 +37,15 @@ async def get_issues(
             joinedload(Issue.execution).joinedload(
                 Execution.dataset_version).joinedload(DatasetVersion.dataset),
             joinedload(Issue.fixes)
+        )
+
+        # Filter by organization through execution -> dataset_version -> dataset
+        query = query.join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Dataset.organization_id == org_context.organization_id
         )
 
         # Apply filters
@@ -52,10 +62,7 @@ async def get_issues(
             query = query.filter(Issue.execution_id == execution_id)
 
         if dataset_id:
-            # Join with execution and dataset_version to filter by dataset
-            query = query.join(Execution).join(DatasetVersion).filter(
-                DatasetVersion.dataset_id == dataset_id
-            )
+            query = query.filter(DatasetVersion.dataset_id == dataset_id)
 
         # Order by creation date (newest first) and apply pagination
         issues = query.order_by(Issue.created_at.desc()).offset(
@@ -98,10 +105,10 @@ async def get_issues(
 async def get_issue(
     issue_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get detailed information about a specific issue
+    Get detailed information about a specific issue within organization
     """
     try:
         issue = db.query(Issue).options(
@@ -109,7 +116,14 @@ async def get_issue(
             joinedload(Issue.execution).joinedload(
                 Execution.dataset_version).joinedload(DatasetVersion.dataset),
             joinedload(Issue.fixes).joinedload(Fix.fixer)
-        ).filter(Issue.id == issue_id).first()
+        ).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Issue.id == issue_id,
+            Dataset.organization_id == org_context.organization_id
+        ).first()
 
         if not issue:
             raise HTTPException(
@@ -168,14 +182,22 @@ async def create_fix(
     issue_id: str,
     fix_data: FixCreate,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Create a fix for an issue
+    Create a fix for an issue within organization
     """
     try:
-        # Check if issue exists
-        issue = db.query(Issue).filter(Issue.id == issue_id).first()
+        # Check if issue exists and belongs to organization
+        issue = db.query(Issue).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Issue.id == issue_id,
+            Dataset.organization_id == org_context.organization_id
+        ).first()
+
         if not issue:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -185,7 +207,7 @@ async def create_fix(
         # Create the fix
         fix = Fix(
             issue_id=issue_id,
-            fixed_by=current_user.id,
+            fixed_by=org_context.user_id,
             new_value=fix_data.new_value,
             comment=fix_data.comment
         )
@@ -212,28 +234,37 @@ async def create_fix(
 async def get_issues_summary(
     days: int = Query(30, description="Number of days to analyze"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get summary statistics about issues
+    Get summary statistics about issues within organization
     """
     try:
         # Calculate date range
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
+        # Base query filtered by organization
+        base_query = db.query(Issue).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Dataset.organization_id == org_context.organization_id
+        )
+
         # Total counts
-        total_issues = db.query(Issue).count()
-        recent_issues = db.query(Issue).filter(
+        total_issues = base_query.count()
+        recent_issues = base_query.filter(
             Issue.created_at >= start_date).count()
-        resolved_issues = db.query(Issue).filter(
+        resolved_issues = base_query.filter(
             Issue.resolved == True).count()
-        unresolved_issues = db.query(Issue).filter(
+        unresolved_issues = base_query.filter(
             Issue.resolved == False).count()
 
         # Issues by severity
         severity_counts = {}
         for severity in Criticality:
-            count = db.query(Issue).filter(Issue.severity == severity).count()
+            count = base_query.filter(Issue.severity == severity).count()
             severity_counts[severity.value] = count
 
         # Recent trends
@@ -245,7 +276,7 @@ async def get_issues_summary(
             day_end = datetime.combine(
                 day, datetime.max.time(), tzinfo=timezone.utc)
 
-            daily_count = db.query(Issue).filter(
+            daily_count = base_query.filter(
                 Issue.created_at >= day_start,
                 Issue.created_at <= day_end
             ).count()
@@ -258,7 +289,13 @@ async def get_issues_summary(
             Rule.name,
             Rule.kind,
             func.count(Issue.id).label('issue_count')
-        ).join(Issue).group_by(Rule.id, Rule.name, Rule.kind).order_by(
+        ).join(Issue).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).group_by(Rule.id, Rule.name, Rule.kind).order_by(
             func.count(Issue.id).desc()
         ).limit(10).all()
 
@@ -296,13 +333,21 @@ async def get_issues_summary(
 async def resolve_issue(
     issue_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
     Mark an issue as resolved without creating a fix
     """
     try:
-        issue = db.query(Issue).filter(Issue.id == issue_id).first()
+        issue = db.query(Issue).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Issue.id == issue_id,
+            Dataset.organization_id == org_context.organization_id
+        ).first()
+
         if not issue:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -330,13 +375,21 @@ async def resolve_issue(
 async def unresolve_issue(
     issue_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
     Mark an issue as unresolved
     """
     try:
-        issue = db.query(Issue).filter(Issue.id == issue_id).first()
+        issue = db.query(Issue).join(Execution).join(
+            DatasetVersion, Execution.dataset_version_id == DatasetVersion.id
+        ).join(
+            Dataset, DatasetVersion.dataset_id == Dataset.id
+        ).filter(
+            Issue.id == issue_id,
+            Dataset.organization_id == org_context.organization_id
+        ).first()
+
         if not issue:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

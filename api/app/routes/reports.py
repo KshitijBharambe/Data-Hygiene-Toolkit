@@ -10,7 +10,11 @@ from app.database import get_session
 from app.models import (
     User, Dataset, DatasetVersion, Export, ExportFormat, Issue, Fix, Execution
 )
-from app.auth import get_any_authenticated_user, get_admin_user
+from app.auth import (
+    get_any_authenticated_user, get_admin_user,
+    get_any_org_member_context, OrgContext
+)
+from app.middleware.organization import OrganizationFilter
 from app.schemas import ExportCreate, ExportResponse
 from app.services.export import ExportService
 from app.services.data_quality import DataQualityService
@@ -29,10 +33,10 @@ async def export_dataset(
     execution_id: Optional[str] = Query(
         None, description="Specific execution context"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Export a dataset in the specified format
+    Export a dataset in the specified format within organization
 
     Args:
         dataset_id: Dataset to export
@@ -44,8 +48,12 @@ async def export_dataset(
     Returns:
         Export information with download details
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -71,7 +79,7 @@ async def export_dataset(
         export_id, file_path = export_service.export_dataset(
             dataset_version_id=latest_version.id,
             export_format=export_format,
-            user_id=current_user.id,
+            user_id=org_context.user_id,
             execution_id=execution_id,
             include_metadata=include_metadata,
             include_issues=include_issues
@@ -104,13 +112,17 @@ async def export_dataset(
 async def get_export_history(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get export history for a dataset
+    Get export history for a dataset within organization
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -190,14 +202,14 @@ async def download_export(
 async def delete_export(
     export_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Delete an export and its associated file
+    Delete an export and its associated file within organization
     """
     try:
         export_service = ExportService(db)
-        success = export_service.delete_export(export_id, current_user.id)
+        success = export_service.delete_export(export_id, org_context.user_id)
 
         return {
             "export_id": export_id,
@@ -218,13 +230,17 @@ async def generate_quality_report(
     include_charts: bool = Query(
         False, description="Include visual charts (future feature)"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Generate comprehensive data quality report for a dataset
+    Generate comprehensive data quality report for a dataset within organization
     """
-    # Check if dataset exists
-    dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+    # Check if dataset exists and belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
     if not dataset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -235,7 +251,7 @@ async def generate_quality_report(
         export_service = ExportService(db)
         export_id, file_path = export_service.export_data_quality_report(
             dataset_id=dataset_id,
-            user_id=current_user.id,
+            user_id=org_context.user_id,
             include_charts=include_charts
         )
 
@@ -260,11 +276,23 @@ async def generate_quality_report(
 async def get_quality_summary(
     dataset_id: str,
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get real-time data quality summary for a dataset
+    Get real-time data quality summary for a dataset within organization
     """
+    # Verify dataset belongs to organization
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id,
+        Dataset.organization_id == org_context.organization_id
+    ).first()
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found"
+        )
+
     try:
         data_quality_service = DataQualityService(db)
         summary = data_quality_service.create_data_quality_summary(dataset_id)
@@ -280,21 +308,46 @@ async def get_quality_summary(
 @router.get("/dashboard/overview")
 async def get_dashboard_overview(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get overview statistics for the dashboard
+    Get overview statistics for the dashboard within organization
     """
     try:
-        # Basic counts
-        total_datasets = db.query(Dataset).count()
-        total_executions = db.query(Execution).count()
-        total_issues = db.query(Issue).count()
-        total_fixes = db.query(Fix).count()
+        # Basic counts - filtered by organization
+        total_datasets = db.query(Dataset).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).count()
 
-        # Recent activity
+        # For executions and issues, filter through dataset relationship
+        org_datasets = db.query(Dataset.id).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).subquery()
+
+        org_dataset_versions = db.query(DatasetVersion.id).filter(
+            DatasetVersion.dataset_id.in_(org_datasets)
+        ).subquery()
+
+        total_executions = db.query(Execution).filter(
+            Execution.dataset_version_id.in_(org_dataset_versions)
+        ).count()
+
+        org_executions = db.query(Execution.id).filter(
+            Execution.dataset_version_id.in_(org_dataset_versions)
+        ).subquery()
+
+        total_issues = db.query(Issue).filter(
+            Issue.execution_id.in_(org_executions)
+        ).count()
+
+        total_fixes = db.query(Fix).join(Issue).filter(
+            Issue.execution_id.in_(org_executions)
+        ).count()
+
+        # Recent activity - filtered by organization
         recent_datasets = (
             db.query(Dataset)
+            .filter(Dataset.organization_id == org_context.organization_id)
             .order_by(Dataset.uploaded_at.desc())
             .limit(5)
             .all()
@@ -302,6 +355,7 @@ async def get_dashboard_overview(
 
         recent_executions = (
             db.query(Execution)
+            .filter(Execution.dataset_version_id.in_(org_dataset_versions))
             .order_by(Execution.started_at.desc())
             .limit(5)
             .all()
@@ -309,7 +363,9 @@ async def get_dashboard_overview(
 
         # Quality statistics (optimized - from database only)
         # Using new DQI/CleanRowsPct/Hybrid metrics system
-        datasets = db.query(Dataset).all()
+        datasets = db.query(Dataset).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).all()
         dqi_scores = []
         clean_rows_pct_scores = []
         hybrid_scores = []
@@ -390,18 +446,29 @@ async def get_dashboard_overview(
 async def get_quality_trends(
     days: int = Query(30, description="Number of days to analyze"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get data quality trends over time
+    Get data quality trends over time within organization
     """
     try:
-        # Get executions from the last N days
+        # Get executions from the last N days - filtered by organization
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+        org_datasets = db.query(Dataset.id).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).subquery()
+
+        org_dataset_versions = db.query(DatasetVersion.id).filter(
+            DatasetVersion.dataset_id.in_(org_datasets)
+        ).subquery()
 
         executions = (
             db.query(Execution)
-            .filter(Execution.started_at >= start_date)
+            .filter(
+                Execution.started_at >= start_date,
+                Execution.dataset_version_id.in_(org_dataset_versions)
+            )
             .order_by(Execution.started_at.asc())
             .all()
         )
@@ -474,13 +541,15 @@ async def get_quality_trends(
 @router.get("/datasets/quality-scores")
 async def get_all_datasets_quality_scores(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Get quality scores for all datasets (optimized - uses DB aggregation only)
+    Get quality scores for all datasets within organization (optimized - uses DB aggregation only)
     """
     try:
-        datasets = db.query(Dataset).all()
+        datasets = db.query(Dataset).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).all()
         quality_scores = []
 
         for dataset in datasets:
@@ -577,14 +646,28 @@ async def get_all_datasets_quality_scores(
 @router.get("/analytics/issue-patterns")
 async def get_issue_patterns(
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Analyze patterns in data quality issues
+    Analyze patterns in data quality issues within organization
     """
     try:
-        # Get all issues
-        issues = db.query(Issue).all()
+        # Get all issues within organization
+        org_datasets = db.query(Dataset.id).filter(
+            Dataset.organization_id == org_context.organization_id
+        ).subquery()
+
+        org_dataset_versions = db.query(DatasetVersion.id).filter(
+            DatasetVersion.dataset_id.in_(org_datasets)
+        ).subquery()
+
+        org_executions = db.query(Execution.id).filter(
+            Execution.dataset_version_id.in_(org_dataset_versions)
+        ).subquery()
+
+        issues = db.query(Issue).filter(
+            Issue.execution_id.in_(org_executions)
+        ).all()
 
         if not issues:
             return {

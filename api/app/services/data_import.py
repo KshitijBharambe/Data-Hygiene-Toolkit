@@ -221,17 +221,26 @@ class DataImportService:
         filename: str,
         df: pd.DataFrame,
         current_user: User,
-        dataset_name: Optional[str] = None
+        dataset_name: Optional[str] = None,
+        organization_id: Optional[str] = None
     ) -> Dataset:
-        """Create dataset record in database"""
+        """Create dataset record in database with organization context"""
+
+        if not organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="organization_id is required"
+            )
 
         # Generate checksum
         file_content = df.to_csv(index=False).encode()
         checksum = self.calculate_file_checksum(file_content)
 
-        # Check for existing dataset with same checksum
+        # Check for existing dataset with same checksum within organization
         existing_dataset = self.db.query(Dataset).filter(
-            Dataset.checksum == checksum).first()
+            Dataset.checksum == checksum,
+            Dataset.organization_id == organization_id
+        ).first()
         if existing_dataset:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -240,8 +249,9 @@ class DataImportService:
 
         source_type = self.detect_source_type(filename)
 
-        # Create dataset record
+        # Create dataset record with organization context
         dataset = Dataset(
+            organization_id=organization_id,
             name=dataset_name or filename.split('.')[0],
             source_type=source_type,
             original_filename=filename,
@@ -299,7 +309,8 @@ class DataImportService:
         self,
         file: UploadFile,
         current_user: User,
-        dataset_name: Optional[str] = None
+        dataset_name: Optional[str] = None,
+        organization_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Main method to import a file"""
 
@@ -327,9 +338,9 @@ class DataImportService:
         # Infer column types and get profile
         column_info = self.infer_column_types(df)
 
-        # Create dataset record
+        # Create dataset record with organization context
         dataset = self.create_dataset_record(
-            file.filename, df, current_user, dataset_name)
+            file.filename, df, current_user, dataset_name, organization_id)
 
         # Create column records
         columns = self.create_dataset_columns(dataset, column_info)
@@ -376,9 +387,16 @@ class DataImportService:
         self,
         json_data: List[Dict[str, Any]],
         current_user: User,
-        dataset_name: str
+        dataset_name: str,
+        organization_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Import JSON data directly"""
+        """Import JSON data directly with organization context"""
+
+        if not organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="organization_id is required"
+            )
 
         if not json_data:
             raise HTTPException(
@@ -406,6 +424,7 @@ class DataImportService:
         checksum = self.calculate_file_checksum(file_content)
 
         dataset = Dataset(
+            organization_id=organization_id,
             name=dataset_name,
             source_type=SourceType.other,  # or create a JSON source type
             original_filename=filename,

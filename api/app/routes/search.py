@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, String
 from typing import List, Dict, Any
 from app.database import get_session
-from app.models import Dataset, Rule, Execution, Issue, User
-from app.auth import get_any_authenticated_user
+from app.models import Dataset, Rule, Execution, Issue, User, DatasetVersion
+from app.auth import get_any_authenticated_user, get_any_org_member_context, OrgContext
+from app.middleware.organization import OrganizationFilter
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -37,10 +38,10 @@ async def search(
     limit: int = Query(
         10, ge=1, le=50, description="Maximum results per category"),
     db: Session = Depends(get_session),
-    current_user: User = Depends(get_any_authenticated_user)
+    org_context: OrgContext = Depends(get_any_org_member_context)
 ):
     """
-    Global search across datasets, rules, executions, and issues.
+    Global search across datasets, rules, executions, and issues within organization.
     Includes static suggestions for common actions/pages.
     """
     # Support partial word matching
@@ -98,6 +99,7 @@ async def search(
         ])
 
     datasets_query = db.query(Dataset).filter(
+        Dataset.organization_id == org_context.organization_id,
         or_(*dataset_conditions)
     ).limit(limit)
 
@@ -135,6 +137,7 @@ async def search(
         ])
 
     rules_query = db.query(Rule).filter(
+        Rule.organization_id == org_context.organization_id,
         or_(*rule_conditions)
     ).limit(limit)
 
@@ -154,10 +157,19 @@ async def search(
             }
         ))
 
-    # Search executions
+    # Search executions - filter by organization through dataset relationship
+    org_datasets = db.query(Dataset.id).filter(
+        Dataset.organization_id == org_context.organization_id
+    ).subquery()
+
+    org_dataset_versions = db.query(DatasetVersion.id).filter(
+        DatasetVersion.dataset_id.in_(org_datasets)
+    ).subquery()
+
     executions_query = db.query(Execution).join(
         Execution.dataset_version
     ).filter(
+        Execution.dataset_version_id.in_(org_dataset_versions),
         Execution.summary.ilike(search_term)
     ).limit(limit)
 
@@ -178,8 +190,13 @@ async def search(
             }
         ))
 
-    # Search issues
+    # Search issues - filter by organization through execution relationship
+    org_executions = db.query(Execution.id).filter(
+        Execution.dataset_version_id.in_(org_dataset_versions)
+    ).subquery()
+
     issues_query = db.query(Issue).filter(
+        Issue.execution_id.in_(org_executions),
         or_(
             Issue.message.ilike(search_term),
             Issue.column_name.ilike(search_term),

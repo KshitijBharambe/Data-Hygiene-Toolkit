@@ -5,8 +5,12 @@
  * All dates from the API are expected to be in ISO 8601 format (UTC).
  */
 
-import { format as dateFnsFormat, formatDistanceToNow, parseISO } from 'date-fns';
-import { toZonedTime, format as formatTz } from 'date-fns-tz';
+import {
+  format as dateFnsFormat,
+  formatDistanceToNow,
+  parseISO,
+} from "date-fns";
+import { toZonedTime, format as formatTz } from "date-fns-tz";
 
 /**
  * Validate if a date value is valid
@@ -18,7 +22,7 @@ export function isValidDate(date: unknown): boolean {
     return !isNaN(date.getTime());
   }
 
-  if (typeof date === 'string') {
+  if (typeof date === "string") {
     const parsed = new Date(date);
     return !isNaN(parsed.getTime());
   }
@@ -36,12 +40,12 @@ export function isValidDate(date: unknown): boolean {
  */
 export function parseDate(dateString: string | Date): Date {
   if (!dateString) {
-    throw new Error('Date value is null or undefined');
+    throw new Error("Date value is null or undefined");
   }
 
   if (dateString instanceof Date) {
     if (isNaN(dateString.getTime())) {
-      throw new Error('Invalid Date object');
+      throw new Error("Invalid Date object");
     }
     return dateString;
   }
@@ -62,8 +66,8 @@ export function parseDate(dateString: string | Date): Date {
  */
 export function formatDate(
   date: string | Date | null | undefined,
-  formatStr: string = 'MMM d, yyyy',
-  fallback: string = 'N/A'
+  formatStr: string = "MMM d, yyyy",
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
@@ -72,7 +76,7 @@ export function formatDate(
     const dateObj = parseDate(date as string | Date);
     return dateFnsFormat(dateObj, formatStr);
   } catch (error) {
-    console.warn('Error formatting date:', date, error);
+    console.warn("Error formatting date:", date, error);
     return fallback;
   }
 }
@@ -83,8 +87,8 @@ export function formatDate(
  */
 export function formatDateTime(
   date: string | Date | null | undefined,
-  formatStr: string = 'MMM d, yyyy h:mm a',
-  fallback: string = 'N/A'
+  formatStr: string = "MMM d, yyyy h:mm a",
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
@@ -93,27 +97,27 @@ export function formatDateTime(
     const dateObj = parseDate(date as string | Date);
     return dateFnsFormat(dateObj, formatStr);
   } catch (error) {
-    console.warn('Error formatting datetime:', date, error);
+    console.warn("Error formatting datetime:", date, error);
     return fallback;
   }
 }
 
 /**
- * Format a date to long datetime string (e.g., "January 15, 2024 at 3:30:45 PM")
+ * Format a date to long datetime string (e.g., "November 30, 2025 at 3:30:45 PM")
  * Returns fallback text if date is invalid
  */
 export function formatDateTimeLong(
   date: string | Date | null | undefined,
-  fallback: string = 'N/A'
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
       return fallback;
     }
     const dateObj = parseDate(date as string | Date);
-    return dateFnsFormat(dateObj, 'MMMM d, yyyy \'at\' h:mm:ss a');
+    return dateFnsFormat(dateObj, "MMMM d, yyyy 'at' h:mm:ss a");
   } catch (error) {
-    console.warn('Error formatting long datetime:', date, error);
+    console.warn("Error formatting long datetime:", date, error);
     return fallback;
   }
 }
@@ -124,7 +128,7 @@ export function formatDateTimeLong(
  */
 export function formatRelativeTime(
   date: string | Date | null | undefined,
-  fallback: string = 'N/A'
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
@@ -133,7 +137,7 @@ export function formatRelativeTime(
     const dateObj = parseDate(date as string | Date);
     return formatDistanceToNow(dateObj, { addSuffix: true });
   } catch (error) {
-    console.warn('Error formatting relative time:', date, error);
+    console.warn("Error formatting relative time:", date, error);
     return fallback;
   }
 }
@@ -145,8 +149,8 @@ export function formatRelativeTime(
 export function formatDateInTimezone(
   date: string | Date | null | undefined,
   timezone: string,
-  formatStr: string = 'MMM d, yyyy h:mm a zzz',
-  fallback: string = 'N/A'
+  formatStr: string = "MMM d, yyyy h:mm a zzz",
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
@@ -156,7 +160,7 @@ export function formatDateInTimezone(
     const zonedDate = toZonedTime(dateObj, timezone);
     return formatTz(zonedDate, formatStr, { timeZone: timezone });
   } catch (error) {
-    console.warn('Error formatting date in timezone:', date, error);
+    console.warn("Error formatting date in timezone:", date, error);
     return fallback;
   }
 }
@@ -194,7 +198,10 @@ export function isToday(date: string | Date | null | undefined): boolean {
  * Check if a date is within the last N days
  * Returns false if date is invalid
  */
-export function isWithinDays(date: string | Date | null | undefined, days: number): boolean {
+export function isWithinDays(
+  date: string | Date | null | undefined,
+  days: number
+): boolean {
   try {
     if (!isValidDate(date)) {
       return false;
@@ -217,7 +224,7 @@ export function isWithinDays(date: string | Date | null | undefined, days: numbe
  */
 export function formatSmartDate(
   date: string | Date | null | undefined,
-  fallback: string = 'N/A'
+  fallback: string = "N/A"
 ): string {
   try {
     if (!isValidDate(date)) {
@@ -232,13 +239,13 @@ export function formatSmartDate(
 
     // If within last 7 days, show day and time
     if (isWithinDays(dateObj, 7)) {
-      return dateFnsFormat(dateObj, 'EEE h:mm a');
+      return dateFnsFormat(dateObj, "EEE h:mm a");
     }
 
     // Otherwise show date
-    return dateFnsFormat(dateObj, 'MMM d, yyyy');
+    return dateFnsFormat(dateObj, "MMM d, yyyy");
   } catch (error) {
-    console.warn('Error formatting smart date:', date, error);
+    console.warn("Error formatting smart date:", date, error);
     return fallback;
   }
 }
