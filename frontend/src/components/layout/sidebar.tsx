@@ -26,6 +26,7 @@ import {
   Lightbulb,
   Bug,
   Zap,
+  FolderTree,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -168,6 +169,18 @@ function getNavigationItems(
           title: "Team Management",
           href: "/dashboard/team",
           icon: Users,
+          roles: ["owner", "admin"],
+        },
+        {
+          title: "Requests",
+          href: "/dashboard/requests",
+          icon: FileText,
+          badge: undefined, // TODO: Add pending requests count
+        },
+        {
+          title: "Compartments",
+          href: "/dashboard/compartments",
+          icon: FolderTree,
           roles: ["owner", "admin"],
         },
         {

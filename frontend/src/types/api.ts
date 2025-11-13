@@ -400,3 +400,89 @@ export interface QualityMetrics {
   message: string | null;
   computed_at: string;
 }
+
+// Compartment types (IAM)
+export interface Compartment {
+  id: string;
+  name: string;
+  description?: string;
+  organization_id: string;
+  parent_compartment_id?: string;
+  path: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  is_active: boolean;
+  children?: Compartment[];
+}
+
+export interface CompartmentCreate {
+  name: string;
+  description?: string;
+  parent_compartment_id?: string;
+}
+
+export interface CompartmentUpdate {
+  name?: string;
+  description?: string;
+  parent_compartment_id?: string;
+}
+
+export interface CompartmentMember {
+  id: string;
+  compartment_id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  role: UserRole;
+  inherit_from_parent: boolean;
+  added_at: string;
+  added_by: string;
+  is_active: boolean;
+}
+
+export interface CompartmentMemberCreate {
+  user_id: string;
+  role: UserRole;
+  inherit_from_parent?: boolean;
+}
+
+// Access Request types
+export type RequestType = "password_change" | "role_change" | "compartment_access" | "data_access";
+export type RequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export interface AccessRequest {
+  id: string;
+  organization_id: string;
+  request_type: RequestType;
+  status: RequestStatus;
+  requester_id: string;
+  requester_name?: string;
+  requester_email?: string;
+  required_approver_role: UserRole;
+  approver_id?: string;
+  approver_name?: string;
+  approved_at?: string;
+  rejected_at?: string;
+  request_data?: string; // JSON string
+  reason?: string;
+  admin_notes?: string;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string;
+}
+
+export interface PasswordChangeRequest {
+  reason?: string;
+  new_password: string;
+}
+
+export interface AccessRequestApproval {
+  admin_notes?: string;
+}
+
+export interface AccessRequestCreate {
+  request_type: RequestType;
+  reason?: string;
+  request_data?: Record<string, unknown>;
+}

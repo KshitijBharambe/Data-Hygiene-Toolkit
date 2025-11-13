@@ -32,6 +32,15 @@ import {
   OrganizationInvite,
   OrganizationUpdateData,
   SwitchOrganizationResponse,
+  Compartment,
+  CompartmentCreate,
+  CompartmentUpdate,
+  CompartmentMember,
+  CompartmentMemberCreate,
+  AccessRequest,
+  AccessRequestCreate,
+  AccessRequestApproval,
+  PasswordChangeRequest,
 } from "@/types/api";
 import { getApiUrl } from "./config";
 
@@ -654,6 +663,103 @@ class ApiClient {
   async createUser(userData: UserCreate): Promise<User> {
     const response = await this.client.post<User>("/auth/register", userData);
     return response.data;
+  }
+
+  // Compartment endpoints
+  async getCompartments(): Promise<Compartment[]> {
+    const response = await this.client.get<Compartment[]>("/compartments");
+    return response.data;
+  }
+
+  async getCompartment(id: string): Promise<Compartment> {
+    const response = await this.client.get<Compartment>(`/compartments/${id}`);
+    return response.data;
+  }
+
+  async createCompartment(data: CompartmentCreate): Promise<Compartment> {
+    const response = await this.client.post<Compartment>("/compartments", data);
+    return response.data;
+  }
+
+  async updateCompartment(id: string, data: CompartmentUpdate): Promise<Compartment> {
+    const response = await this.client.put<Compartment>(`/compartments/${id}`, data);
+    return response.data;
+  }
+
+  async deleteCompartment(id: string): Promise<void> {
+    await this.client.delete(`/compartments/${id}`);
+  }
+
+  async getCompartmentMembers(compartmentId: string): Promise<CompartmentMember[]> {
+    const response = await this.client.get<CompartmentMember[]>(
+      `/compartments/${compartmentId}/members`
+    );
+    return response.data;
+  }
+
+  async addCompartmentMember(
+    compartmentId: string,
+    data: CompartmentMemberCreate
+  ): Promise<CompartmentMember> {
+    const response = await this.client.post<CompartmentMember>(
+      `/compartments/${compartmentId}/members`,
+      data
+    );
+    return response.data;
+  }
+
+  async removeCompartmentMember(compartmentId: string, memberId: string): Promise<void> {
+    await this.client.delete(`/compartments/${compartmentId}/members/${memberId}`);
+  }
+
+  // Access Request endpoints
+  async getMyAccessRequests(): Promise<AccessRequest[]> {
+    const response = await this.client.get<AccessRequest[]>("/access-requests");
+    return response.data;
+  }
+
+  async getPendingApprovals(): Promise<AccessRequest[]> {
+    const response = await this.client.get<AccessRequest[]>("/access-requests/pending");
+    return response.data;
+  }
+
+  async createAccessRequest(data: AccessRequestCreate): Promise<AccessRequest> {
+    const response = await this.client.post<AccessRequest>("/access-requests", data);
+    return response.data;
+  }
+
+  async requestPasswordChange(data: PasswordChangeRequest): Promise<AccessRequest> {
+    const response = await this.client.post<AccessRequest>(
+      "/access-requests/password-change",
+      data
+    );
+    return response.data;
+  }
+
+  async approveAccessRequest(
+    id: string,
+    data: AccessRequestApproval
+  ): Promise<AccessRequest> {
+    const response = await this.client.put<AccessRequest>(
+      `/access-requests/${id}/approve`,
+      data
+    );
+    return response.data;
+  }
+
+  async rejectAccessRequest(
+    id: string,
+    data: AccessRequestApproval
+  ): Promise<AccessRequest> {
+    const response = await this.client.put<AccessRequest>(
+      `/access-requests/${id}/reject`,
+      data
+    );
+    return response.data;
+  }
+
+  async cancelAccessRequest(id: string): Promise<void> {
+    await this.client.delete(`/access-requests/${id}`);
   }
 
   // Generic HTTP methods for direct API access
